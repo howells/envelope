@@ -105,6 +105,37 @@ const r2 = await generateText({
 });
 ```
 
+Structured JSON output is also supported via `Output.object()`:
+
+```ts
+import { generateText, Output, jsonSchema } from "ai";
+import { claudeCode } from "@howells/envelope/ai-sdk";
+
+const { output } = await generateText({
+  model: claudeCode("sonnet"),
+  prompt: "List three colours and their hex codes.",
+  output: Output.object({
+    schema: jsonSchema({
+      type: "object",
+      properties: {
+        colours: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              name: { type: "string" },
+              hex: { type: "string" },
+            },
+            required: ["name", "hex"],
+          },
+        },
+      },
+      required: ["colours"],
+    }),
+  }),
+});
+```
+
 Notes:
-- Current adapter is text-only and uses a single-shot call under the hood.
+- The adapter uses single-shot calls under the hood (streaming is simulated).
 - If we want true streaming, we can extend it to use `claude --output-format stream-json`.
