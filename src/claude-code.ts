@@ -9,6 +9,15 @@ export interface ClaudeCodeOptions {
   model?: ClaudeCodeModel;
   maxBudgetUsd?: number;
   timeoutMs?: number;
+  /**
+   * Number of retries after a timeout (SIGTERM kill) or transient failure.
+   * Total attempts = 1 + retries.
+   */
+  retries?: number;
+  /**
+   * Base delay between retries (ms). Uses simple linear backoff by attempt.
+   */
+  retryDelayMs?: number;
   permissionMode?: "dontAsk" | "default" | "bypassPermissions";
   tools?: string; // pass "" to disable tools
 }
@@ -47,8 +56,11 @@ function execFileAsync(
       },
       (err, stdout, stderr) => {
         if (err) {
+          const code = (err as any).code ?? "?";
+          const signal = (err as any).signal ?? "?";
+          const killed = (err as any).killed ?? false;
           const e = new Error(
-            `claude CLI failed (code=${(err as any).code ?? "?"}): ${stderr || stdout}`
+            `claude CLI failed (code=${code}, signal=${signal}, killed=${killed}): ${stderr || stdout}`
           );
           (e as any).cause = err;
           reject(e);
@@ -64,6 +76,15 @@ function buildBaseArgs(opts: Required<Pick<ClaudeCodeOptions, "model" | "permiss
   return ["--model", opts.model, "-p", "--permission-mode", opts.permissionMode, "--tools", opts.tools];
 }
 
+function sleep(ms: number) {
+  return new Promise<void>((r) => setTimeout(r, ms));
+}
+
+function isTimeoutKill(err: unknown) {
+  const e = err as any;
+  return Boolean(e && e.killed === true && e.signal === "SIGTERM");
+}
+
 export async function claudeCodeStructured<TStructured>(args: {
   prompt: string;
   jsonSchema: string;
@@ -76,24 +97,49 @@ export async function claudeCodeStructured<TStructured>(args: {
     model: args.options?.model ?? "opus",
     maxBudgetUsd: args.options?.maxBudgetUsd ?? 5,
     timeoutMs: args.options?.timeoutMs ?? 120_000,
+    retries: args.options?.retries ?? 1,
+    retryDelayMs: args.options?.retryDelayMs ?? 800,
     permissionMode: args.options?.permissionMode ?? "dontAsk",
     tools: args.options?.tools ?? "",
   };
 
-  const { stdout } = await execFileAsync(
-    options.claudePath,
-    [
-      ...buildBaseArgs(options),
-      "--max-budget-usd",
-      String(options.maxBudgetUsd),
-      "--output-format",
-      "json",
-      "--json-schema",
-      args.jsonSchema,
-      args.prompt,
-    ],
-    { cwd: options.cwd, env: options.env, timeoutMs: options.timeoutMs }
-  );
+  const cliArgs = [
+    ...buildBaseArgs(options),
+    "--max-budget-usd",
+    String(options.maxBudgetUsd),
+    "--output-format",
+    "json",
+    "--json-schema",
+    args.jsonSchema,
+    args.prompt,
+  ];
+
+  let stdout: string | null = null;
+  let lastErr: unknown = null;
+  for (let attempt = 0; attempt <= options.retries; attempt++) {
+    try {
+      ({ stdout } = await execFileAsync(options.claudePath, cliArgs, {
+        cwd: options.cwd,
+        env: options.env,
+        timeoutMs: options.timeoutMs,
+      }));
+      lastErr = null;
+      break;
+    } catch (e) {
+      lastErr = e;
+      // Retry only if it's likely transient (timeout kill). Other errors should
+      // generally be surfaced immediately to avoid masking real failures.
+      if (!isTimeoutKill((e as any)?.cause ?? e) || attempt >= options.retries) {
+        throw e;
+      }
+      const delay = options.retryDelayMs * (attempt + 1);
+      await sleep(delay);
+    }
+  }
+
+  if (stdout == null) {
+    throw lastErr instanceof Error ? lastErr : new Error("claude CLI failed");
+  }
 
   let envelopeUnknown: unknown;
   try {
@@ -125,22 +171,45 @@ export async function claudeCodeText(args: {
     model: args.options?.model ?? "opus",
     maxBudgetUsd: args.options?.maxBudgetUsd ?? 5,
     timeoutMs: args.options?.timeoutMs ?? 120_000,
+    retries: args.options?.retries ?? 1,
+    retryDelayMs: args.options?.retryDelayMs ?? 800,
     permissionMode: args.options?.permissionMode ?? "dontAsk",
     tools: args.options?.tools ?? "",
   };
 
-  const { stdout } = await execFileAsync(
-    options.claudePath,
-    [
-      ...buildBaseArgs(options),
-      "--max-budget-usd",
-      String(options.maxBudgetUsd),
-      "--output-format",
-      "json",
-      args.prompt,
-    ],
-    { cwd: options.cwd, env: options.env, timeoutMs: options.timeoutMs }
-  );
+  const cliArgs = [
+    ...buildBaseArgs(options),
+    "--max-budget-usd",
+    String(options.maxBudgetUsd),
+    "--output-format",
+    "json",
+    args.prompt,
+  ];
+
+  let stdout: string | null = null;
+  let lastErr: unknown = null;
+  for (let attempt = 0; attempt <= options.retries; attempt++) {
+    try {
+      ({ stdout } = await execFileAsync(options.claudePath, cliArgs, {
+        cwd: options.cwd,
+        env: options.env,
+        timeoutMs: options.timeoutMs,
+      }));
+      lastErr = null;
+      break;
+    } catch (e) {
+      lastErr = e;
+      if (!isTimeoutKill((e as any)?.cause ?? e) || attempt >= options.retries) {
+        throw e;
+      }
+      const delay = options.retryDelayMs * (attempt + 1);
+      await sleep(delay);
+    }
+  }
+
+  if (stdout == null) {
+    throw lastErr instanceof Error ? lastErr : new Error("claude CLI failed");
+  }
 
   let envelopeUnknown: unknown;
   try {
@@ -157,4 +226,3 @@ export async function claudeCodeText(args: {
   const envelope = envelopeUnknown as ClaudeCodeEnvelope<unknown>;
   return { text: envelope.result ?? "" };
 }
-

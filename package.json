@@ -1,6 +1,6 @@
 {
   "name": "@howells/envelope",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "private": false,
   "description": "Strict Zod IO wrapper around local CLI LLMs (Claude Code, Codex), plus an AI SDK adapter.",
   "type": "module",
