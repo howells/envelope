@@ -1,0 +1,153 @@
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+}
+
+body {
+  font-family: system-ui, -apple-system, sans-serif;
+  background: #0a0a0a;
+  color: #e0e0e0;
+  min-height: 100vh;
+}
+
+.container {
+  max-width: 640px;
+  margin: 0 auto;
+  padding: 3rem 1.5rem;
+}
+
+h1 {
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: #fff;
+}
+
+.subtitle {
+  margin-top: 0.25rem;
+  font-size: 0.85rem;
+  color: #888;
+}
+
+.subtitle code {
+  color: #aaa;
+  background: #1a1a1a;
+  padding: 0.1em 0.35em;
+  border-radius: 4px;
+  font-size: 0.8rem;
+}
+
+form {
+  margin-top: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+textarea {
+  width: 100%;
+  padding: 0.75rem;
+  background: #141414;
+  border: 1px solid #2a2a2a;
+  border-radius: 8px;
+  color: #e0e0e0;
+  font-family: inherit;
+  font-size: 0.9rem;
+  resize: vertical;
+}
+
+textarea:focus {
+  outline: none;
+  border-color: #555;
+}
+
+.controls {
+  display: flex;
+  gap: 0.5rem;
+}
+
+select {
+  flex: 1;
+  padding: 0.5rem 0.75rem;
+  background: #141414;
+  border: 1px solid #2a2a2a;
+  border-radius: 8px;
+  color: #e0e0e0;
+  font-size: 0.85rem;
+}
+
+.toggle {
+  display: flex;
+  border: 1px solid #2a2a2a;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.toggle button {
+  padding: 0.5rem 0.75rem;
+  background: #141414;
+  color: #888;
+  border: none;
+  border-radius: 0;
+  font-weight: 500;
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+
+.toggle button.active {
+  background: #2a2a2a;
+  color: #fff;
+}
+
+.toggle button:not(:last-child) {
+  border-right: 1px solid #2a2a2a;
+}
+
+textarea.schema {
+  font-family: ui-monospace, "SF Mono", monospace;
+  font-size: 0.8rem;
+  line-height: 1.5;
+}
+
+button[type="submit"] {
+  padding: 0.5rem 1.25rem;
+  background: #fff;
+  color: #000;
+  border: none;
+  border-radius: 8px;
+  font-weight: 600;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+button[type="submit"]:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.error {
+  margin-top: 1rem;
+  padding: 0.75rem;
+  background: #1a0000;
+  border: 1px solid #3a1111;
+  border-radius: 8px;
+  color: #f87171;
+  font-size: 0.85rem;
+}
+
+.response {
+  margin-top: 1rem;
+}
+
+.response pre {
+  padding: 1rem;
+  background: #141414;
+  border: 1px solid #2a2a2a;
+  border-radius: 8px;
+  font-size: 0.8rem;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow-x: auto;
+}
