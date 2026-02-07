@@ -7,6 +7,12 @@ This is designed for local Node apps where you want "model calls" to look like a
 - request structured JSON output via `--json-schema` / `--output-schema`
 - validate outputs with Zod again (defense in depth)
 
+## Install
+
+```bash
+npm install @howells/envelope
+```
+
 ## Requirements
 
 - Node 20+
