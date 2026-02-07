@@ -18,8 +18,22 @@ export interface ClaudeCodeOptions {
    * Base delay between retries (ms). Uses simple linear backoff by attempt.
    */
   retryDelayMs?: number;
-  permissionMode?: "dontAsk" | "default" | "bypassPermissions";
+  permissionMode?:
+    | "default"
+    | "plan"
+    | "dontAsk"
+    | "acceptEdits"
+    | "bypassPermissions"
+    | "delegate";
   tools?: string; // pass "" to disable tools
+  systemPrompt?: string;
+  appendSystemPrompt?: string;
+  allowedTools?: string[];
+  disallowedTools?: string[];
+  fallbackModel?: string;
+  betas?: string[];
+  agent?: string;
+  agents?: string;
 }
 
 export interface ClaudeCodeEnvelope<TStructured> {
@@ -147,8 +161,61 @@ function spawnAsync(
   });
 }
 
-function buildBaseArgs(opts: Required<Pick<ClaudeCodeOptions, "model" | "permissionMode" | "tools">>) {
-  return ["--model", opts.model, "-p", "--permission-mode", opts.permissionMode, "--tools", opts.tools];
+export function defaultClaudeOptions(opts?: ClaudeCodeOptions): Required<ClaudeCodeOptions> {
+  return {
+    claudePath: opts?.claudePath ?? "claude",
+    cwd: opts?.cwd ?? process.cwd(),
+    env: opts?.env ?? process.env,
+    model: opts?.model ?? "opus",
+    maxBudgetUsd: opts?.maxBudgetUsd ?? 5,
+    timeoutMs: opts?.timeoutMs ?? 120_000,
+    retries: opts?.retries ?? 1,
+    retryDelayMs: opts?.retryDelayMs ?? 800,
+    permissionMode: opts?.permissionMode ?? "dontAsk",
+    tools: opts?.tools ?? "",
+    systemPrompt: opts?.systemPrompt ?? "",
+    appendSystemPrompt: opts?.appendSystemPrompt ?? "",
+    allowedTools: opts?.allowedTools ?? [],
+    disallowedTools: opts?.disallowedTools ?? [],
+    fallbackModel: opts?.fallbackModel ?? "",
+    betas: opts?.betas ?? [],
+    agent: opts?.agent ?? "",
+    agents: opts?.agents ?? "",
+  };
+}
+
+export function buildBaseArgs(opts: Required<ClaudeCodeOptions>) {
+  const args = [
+    "--model", opts.model,
+    "-p",
+    "--permission-mode", opts.permissionMode,
+    "--tools", opts.tools,
+  ];
+  if (opts.systemPrompt) {
+    args.push("--system-prompt", opts.systemPrompt);
+  }
+  if (opts.appendSystemPrompt) {
+    args.push("--append-system-prompt", opts.appendSystemPrompt);
+  }
+  for (const t of opts.allowedTools) {
+    args.push("--allowedTools", t);
+  }
+  for (const t of opts.disallowedTools) {
+    args.push("--disallowedTools", t);
+  }
+  if (opts.fallbackModel) {
+    args.push("--fallback-model", opts.fallbackModel);
+  }
+  for (const b of opts.betas) {
+    args.push("--betas", b);
+  }
+  if (opts.agent) {
+    args.push("--agent", opts.agent);
+  }
+  if (opts.agents) {
+    args.push("--agents", opts.agents);
+  }
+  return args;
 }
 
 function sleep(ms: number) {
@@ -165,18 +232,7 @@ export async function claudeCodeStructured<TStructured>(args: {
   jsonSchema: string;
   options?: ClaudeCodeOptions;
 }) {
-  const options: Required<ClaudeCodeOptions> = {
-    claudePath: args.options?.claudePath ?? "claude",
-    cwd: args.options?.cwd ?? process.cwd(),
-    env: args.options?.env ?? process.env,
-    model: args.options?.model ?? "opus",
-    maxBudgetUsd: args.options?.maxBudgetUsd ?? 5,
-    timeoutMs: args.options?.timeoutMs ?? 120_000,
-    retries: args.options?.retries ?? 1,
-    retryDelayMs: args.options?.retryDelayMs ?? 800,
-    permissionMode: args.options?.permissionMode ?? "dontAsk",
-    tools: args.options?.tools ?? "",
-  };
+  const options = defaultClaudeOptions(args.options);
 
   const cliArgs = [
     ...buildBaseArgs(options),
@@ -239,18 +295,7 @@ export async function claudeCodeText(args: {
   prompt: string;
   options?: ClaudeCodeOptions;
 }) {
-  const options: Required<ClaudeCodeOptions> = {
-    claudePath: args.options?.claudePath ?? "claude",
-    cwd: args.options?.cwd ?? process.cwd(),
-    env: args.options?.env ?? process.env,
-    model: args.options?.model ?? "opus",
-    maxBudgetUsd: args.options?.maxBudgetUsd ?? 5,
-    timeoutMs: args.options?.timeoutMs ?? 120_000,
-    retries: args.options?.retries ?? 1,
-    retryDelayMs: args.options?.retryDelayMs ?? 800,
-    permissionMode: args.options?.permissionMode ?? "dontAsk",
-    tools: args.options?.tools ?? "",
-  };
+  const options = defaultClaudeOptions(args.options);
 
   const cliArgs = [
     ...buildBaseArgs(options),

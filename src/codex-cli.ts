@@ -16,6 +16,7 @@ export interface CodexOptions {
   profile?: string;
   config?: Array<string>; // ["key=value", ...]
   jsonlEvents?: boolean; // --json
+  image?: string[];
 }
 
 function execFileAsync(
@@ -49,7 +50,7 @@ function execFileAsync(
   });
 }
 
-function baseArgs(options: Required<CodexOptions>) {
+export function baseArgs(options: Required<CodexOptions>) {
   const args: string[] = ["exec"];
   if (options.skipGitRepoCheck) {
     args.push("--skip-git-repo-check");
@@ -72,10 +73,13 @@ function baseArgs(options: Required<CodexOptions>) {
   if (options.jsonlEvents) {
     args.push("--json");
   }
+  for (const img of options.image) {
+    args.push("--image", img);
+  }
   return args;
 }
 
-function defaultOptions(opts?: CodexOptions): Required<CodexOptions> {
+export function defaultOptions(opts?: CodexOptions): Required<CodexOptions> {
   return {
     codexPath: opts?.codexPath ?? "codex",
     cwd: opts?.cwd ?? process.cwd(),
@@ -87,6 +91,7 @@ function defaultOptions(opts?: CodexOptions): Required<CodexOptions> {
     profile: opts?.profile ?? "",
     config: opts?.config ?? [],
     jsonlEvents: opts?.jsonlEvents ?? false,
+    image: opts?.image ?? [],
   };
 }
 
@@ -158,4 +163,3 @@ export async function codexStructured<TStructured>(args: {
     await rm(td, { recursive: true, force: true });
   }
 }
-
