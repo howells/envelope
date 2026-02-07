@@ -12,6 +12,14 @@ import type {
 } from "@ai-sdk/provider";
 import { createClaudeCodeClient, createCodexClient, type CliClient, type CliTool } from "./client.js";
 
+function extractText(content: ReadonlyArray<{ type: string }>): string {
+  return content
+    .filter((p): p is { type: "text"; text: string } =>
+      p.type === "text" && "text" in p && typeof (p as any).text === "string")
+    .map((p) => p.text)
+    .join("");
+}
+
 function v2PromptToText(prompt: LanguageModelV2CallOptions["prompt"]): string {
   const parts: string[] = [];
   for (const m of prompt) {
@@ -20,10 +28,7 @@ function v2PromptToText(prompt: LanguageModelV2CallOptions["prompt"]): string {
       continue;
     }
     if (!Array.isArray(m.content)) continue;
-    const text = (m.content as Array<{ type: string; text?: string }>)
-      .filter((p) => p.type === "text" && typeof p.text === "string")
-      .map((p) => p.text!)
-      .join("");
+    const text = extractText(m.content);
     if (text) {
       parts.push(`${m.role}: ${text}`);
     }

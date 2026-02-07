@@ -95,17 +95,20 @@ export function defaultOptions(opts?: CodexOptions): Required<CodexOptions> {
   };
 }
 
-export async function codexText(args: { prompt: string; options?: CodexOptions }) {
-  const options = defaultOptions(args.options);
-
+async function execInTempDir(
+  options: Required<CodexOptions>,
+  setup: (td: string, outPath: string) => Promise<string[]>,
+): Promise<string> {
   const td = await mkdtemp(join(tmpdir(), "envelope-codex-"));
   try {
     const outPath = join(td, "last.txt");
+    const extraArgs = await setup(td, outPath);
+
     const cliArgs = [
       ...baseArgs(options),
+      ...extraArgs,
       "--output-last-message",
       outPath,
-      args.prompt,
     ];
 
     await execFileAsync(options.codexPath, cliArgs, {
@@ -114,11 +117,16 @@ export async function codexText(args: { prompt: string; options?: CodexOptions }
       timeoutMs: options.timeoutMs,
     });
 
-    const text = await readFile(outPath, "utf8");
-    return { text };
+    return await readFile(outPath, "utf8");
   } finally {
     await rm(td, { recursive: true, force: true });
   }
+}
+
+export async function codexText(args: { prompt: string; options?: CodexOptions }) {
+  const options = defaultOptions(args.options);
+  const text = await execInTempDir(options, async () => [args.prompt]);
+  return { text };
 }
 
 export async function codexStructured<TStructured>(args: {
@@ -128,38 +136,18 @@ export async function codexStructured<TStructured>(args: {
 }) {
   const options = defaultOptions(args.options);
 
-  const td = await mkdtemp(join(tmpdir(), "envelope-codex-"));
-  try {
+  const raw = await execInTempDir(options, async (td) => {
     const schemaPath = join(td, "schema.json");
-    const outPath = join(td, "last.txt");
-
     await writeFile(schemaPath, args.jsonSchema, "utf8");
+    return ["--output-schema", schemaPath, args.prompt];
+  });
 
-    const cliArgs = [
-      ...baseArgs(options),
-      "--output-schema",
-      schemaPath,
-      "--output-last-message",
-      outPath,
-      args.prompt,
-    ];
-
-    await execFileAsync(options.codexPath, cliArgs, {
-      cwd: options.cwd,
-      env: options.env,
-      timeoutMs: options.timeoutMs,
-    });
-
-    const raw = await readFile(outPath, "utf8");
-    let parsed: unknown;
-    try {
-      parsed = JSON.parse(raw);
-    } catch {
-      throw new Error(`codex output was not JSON. First 200 chars:\n${raw.slice(0, 200)}`);
-    }
-
-    return { structured: parsed as TStructured, raw };
-  } finally {
-    await rm(td, { recursive: true, force: true });
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    throw new Error(`codex output was not JSON. First 200 chars:\n${raw.slice(0, 200)}`);
   }
+
+  return { structured: parsed as TStructured, raw };
 }

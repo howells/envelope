@@ -227,6 +227,38 @@ function isTimeoutKill(err: unknown) {
   return Boolean(e && e.killed === true && e.signal === "SIGTERM");
 }
 
+async function spawnWithRetry(
+  options: Required<ClaudeCodeOptions>,
+  cliArgs: string[],
+): Promise<string> {
+  let stdout: string | null = null;
+  let lastErr: unknown = null;
+  for (let attempt = 0; attempt <= options.retries; attempt++) {
+    try {
+      ({ stdout } = await spawnAsync(options.claudePath, cliArgs, {
+        cwd: options.cwd,
+        env: options.env,
+        timeoutMs: options.timeoutMs,
+      }));
+      lastErr = null;
+      break;
+    } catch (e) {
+      lastErr = e;
+      if (!isTimeoutKill((e as any)?.cause ?? e) || attempt >= options.retries) {
+        throw e;
+      }
+      const delay = options.retryDelayMs * (attempt + 1);
+      await sleep(delay);
+    }
+  }
+
+  if (stdout == null) {
+    throw lastErr instanceof Error ? lastErr : new Error("claude CLI failed");
+  }
+
+  return stdout;
+}
+
 export async function claudeCodeStructured<TStructured>(args: {
   prompt: string;
   jsonSchema: string;
@@ -245,32 +277,7 @@ export async function claudeCodeStructured<TStructured>(args: {
     args.prompt,
   ];
 
-  let stdout: string | null = null;
-  let lastErr: unknown = null;
-  for (let attempt = 0; attempt <= options.retries; attempt++) {
-    try {
-      ({ stdout } = await spawnAsync(options.claudePath, cliArgs, {
-        cwd: options.cwd,
-        env: options.env,
-        timeoutMs: options.timeoutMs,
-      }));
-      lastErr = null;
-      break;
-    } catch (e) {
-      lastErr = e;
-      // Retry only if it's likely transient (timeout kill). Other errors should
-      // generally be surfaced immediately to avoid masking real failures.
-      if (!isTimeoutKill((e as any)?.cause ?? e) || attempt >= options.retries) {
-        throw e;
-      }
-      const delay = options.retryDelayMs * (attempt + 1);
-      await sleep(delay);
-    }
-  }
-
-  if (stdout == null) {
-    throw lastErr instanceof Error ? lastErr : new Error("claude CLI failed");
-  }
+  const stdout = await spawnWithRetry(options, cliArgs);
 
   let envelopeUnknown: unknown;
   try {
@@ -306,30 +313,7 @@ export async function claudeCodeText(args: {
     args.prompt,
   ];
 
-  let stdout: string | null = null;
-  let lastErr: unknown = null;
-  for (let attempt = 0; attempt <= options.retries; attempt++) {
-    try {
-      ({ stdout } = await spawnAsync(options.claudePath, cliArgs, {
-        cwd: options.cwd,
-        env: options.env,
-        timeoutMs: options.timeoutMs,
-      }));
-      lastErr = null;
-      break;
-    } catch (e) {
-      lastErr = e;
-      if (!isTimeoutKill((e as any)?.cause ?? e) || attempt >= options.retries) {
-        throw e;
-      }
-      const delay = options.retryDelayMs * (attempt + 1);
-      await sleep(delay);
-    }
-  }
-
-  if (stdout == null) {
-    throw lastErr instanceof Error ? lastErr : new Error("claude CLI failed");
-  }
+  const stdout = await spawnWithRetry(options, cliArgs);
 
   let envelopeUnknown: unknown;
   try {

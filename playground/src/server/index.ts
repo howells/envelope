@@ -18,37 +18,43 @@ app.post("/api/prompt", async (req, res) => {
     return;
   }
 
-  const tool = cli === "codex" ? "codex" : "claude-code";
-  const model =
-    tool === "codex"
-      ? codex("gpt-5.3-codex", { timeoutMs: 60_000 })
-      : claudeCode("sonnet", { maxBudgetUsd: 1, timeoutMs: 60_000 });
+  const isCodex = cli === "codex";
+  const model = isCodex
+    ? codex("gpt-5.3-codex", { timeoutMs: 60_000 })
+    : claudeCode("sonnet", { maxBudgetUsd: 1, timeoutMs: 60_000 });
 
-  try {
-    if (outputType === "json") {
-      let parsed: unknown;
-      try {
-        parsed = JSON.parse(schema ?? "{}");
-      } catch {
-        res.status(400).json({ error: "Invalid JSON schema" });
-        return;
-      }
+  if (outputType === "json") {
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(schema ?? "{}");
+    } catch {
+      res.status(400).json({ error: "Invalid JSON schema" });
+      return;
+    }
 
+    try {
       const result = await generateText({
         model,
         prompt,
         output: Output.object({ schema: jsonSchema(parsed as any) }),
       });
 
-      res.json({ text: JSON.stringify(await result.output, null, 2), cli: tool });
-    } else {
-      const result = await generateText({ model, prompt });
-      res.json({ text: result.text, cli: tool });
+      res.json({ text: JSON.stringify(await result.output, null, 2), cli });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      console.error(`[envelope] ${cli} error:`, message);
+      res.status(500).json({ error: message, cli });
     }
+    return;
+  }
+
+  try {
+    const result = await generateText({ model, prompt });
+    res.json({ text: result.text, cli });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    console.error(`[envelope] ${tool} error:`, message);
-    res.status(500).json({ error: message, cli: tool });
+    console.error(`[envelope] ${cli} error:`, message);
+    res.status(500).json({ error: message, cli });
   }
 });
 
