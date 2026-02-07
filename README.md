@@ -16,7 +16,11 @@ This is designed for local Node apps where you want "model calls" to look like a
 
 ```ts
 import { z } from "zod";
-import { createEnvelope, createClaudeCodeClient, createCodexClient } from "envelope";
+import {
+  createEnvelope,
+  createClaudeCodeClient,
+  createCodexClient,
+} from "@howells/envelope";
 
 const summarizeClaude = createEnvelope({
   client: createClaudeCodeClient({ model: "opus", maxBudgetUsd: 2 }),
@@ -42,7 +46,7 @@ console.log(out.summary);
 
 ```ts
 import { generateText } from "ai";
-import { claudeCode, codex } from "envelope/ai-sdk";
+import { claudeCode, codex } from "@howells/envelope/ai-sdk";
 
 const { text } = await generateText({
   model: claudeCode("opus"),
