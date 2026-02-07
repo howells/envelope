@@ -1,40 +1,34 @@
-// AI SDK adapter for CLI tools (Claude Code, Codex).
+// AI SDK v2 adapter for CLI tools (Claude Code, Codex).
 //
-// This is intentionally minimal and text-first. For `object-json` mode, it
-// maps the JSON schema to the tool's structured output mode.
+// Implements LanguageModelV2 from @ai-sdk/provider >=3, compatible with ai@6.
+// Text-first; for JSON mode it maps responseFormat.schema to the CLI's
+// structured-output mode.
 
 import type {
   JSONSchema7,
-  LanguageModelV1,
-  LanguageModelV1CallOptions,
-  LanguageModelV1FinishReason,
-  LanguageModelV1StreamPart,
+  LanguageModelV2,
+  LanguageModelV2CallOptions,
+  LanguageModelV2StreamPart,
 } from "@ai-sdk/provider";
 import { createClaudeCodeClient, createCodexClient, type CliClient, type CliTool } from "./client.js";
 
-function v1PromptToText(prompt: LanguageModelV1CallOptions["prompt"]): string {
+function v2PromptToText(prompt: LanguageModelV2CallOptions["prompt"]): string {
   const parts: string[] = [];
   for (const m of prompt) {
-    const role = (m as any).role;
-    const content = (m as any).content;
-    if (!Array.isArray(content)) continue;
-    const text = content
-      .filter(
-        (p: any) =>
-          p && typeof p === "object" && p.type === "text" && typeof p.text === "string"
-      )
-      .map((p: any) => p.text)
+    if (m.role === "system") {
+      parts.push(`system: ${m.content}`);
+      continue;
+    }
+    if (!Array.isArray(m.content)) continue;
+    const text = (m.content as Array<{ type: string; text?: string }>)
+      .filter((p) => p.type === "text" && typeof p.text === "string")
+      .map((p) => p.text!)
       .join("");
     if (text) {
-      parts.push(`${role}: ${text}`);
+      parts.push(`${m.role}: ${text}`);
     }
   }
   return parts.join("\n");
-}
-
-function toSchema(schema: JSONSchema7 | undefined): JSONSchema7 | null {
-  if (!schema) return null;
-  return schema;
 }
 
 function makeClient(tool: CliTool, model: string, opts?: any): CliClient {
@@ -48,60 +42,73 @@ export function cliModel(args: {
   tool: CliTool;
   model: string;
   clientOptions?: any;
-}): LanguageModelV1 {
+}): LanguageModelV2 {
   const client = makeClient(args.tool, args.model, args.clientOptions);
 
   return {
-    specificationVersion: "v1",
+    specificationVersion: "v2",
     provider: args.tool,
     modelId: args.model,
-    defaultObjectGenerationMode: "json",
-    supportsStructuredOutputs: true,
+    supportedUrls: {},
 
-    async doGenerate(callOptions: LanguageModelV1CallOptions) {
-      const promptText = v1PromptToText(callOptions.prompt);
-      const finishReason: LanguageModelV1FinishReason = "stop";
+    async doGenerate(callOptions: LanguageModelV2CallOptions) {
+      const promptText = v2PromptToText(callOptions.prompt);
 
-      if (callOptions.mode.type === "object-json") {
-        const schema = toSchema(callOptions.mode.schema);
-        if (!schema) {
-          throw new Error("object-json mode requires a JSON schema");
-        }
+      // Structured JSON output mode
+      if (
+        callOptions.responseFormat?.type === "json" &&
+        callOptions.responseFormat.schema
+      ) {
+        const schema = callOptions.responseFormat.schema as JSONSchema7;
         const res = await client.structured<unknown>({ prompt: promptText, jsonSchema: schema });
+        const text = JSON.stringify(res.structured ?? null);
         return {
-          text: JSON.stringify(res.structured ?? null),
-          finishReason,
-          usage: { promptTokens: 0, completionTokens: 0 },
-          rawCall: { rawPrompt: promptText, rawSettings: { mode: callOptions.mode } },
+          content: [{ type: "text" as const, text }],
+          finishReason: "stop" as const,
+          usage: { inputTokens: undefined, outputTokens: undefined, totalTokens: undefined },
+          warnings: [],
         };
       }
 
+      // Plain text mode (default)
       const res = await client.text({ prompt: promptText });
       return {
-        text: res.text,
-        finishReason,
-        usage: { promptTokens: 0, completionTokens: 0 },
-        rawCall: { rawPrompt: promptText, rawSettings: { mode: callOptions.mode } },
+        content: [{ type: "text" as const, text: res.text }],
+        finishReason: "stop" as const,
+        usage: { inputTokens: undefined, outputTokens: undefined, totalTokens: undefined },
+        warnings: [],
       };
     },
 
-    async doStream(callOptions: LanguageModelV1CallOptions) {
-      const res = await this.doGenerate(callOptions);
-      const stream = new ReadableStream<LanguageModelV1StreamPart>({
+    async doStream(callOptions: LanguageModelV2CallOptions) {
+      // CLI tools don't truly stream, so we fake it with a single chunk.
+      const result = await this.doGenerate(callOptions);
+      const textContent = result.content.find(
+        (c): c is { type: "text"; text: string } => c.type === "text"
+      );
+      const textId = "t0";
+
+      const stream = new ReadableStream<LanguageModelV2StreamPart>({
         start(controller) {
-          if (res.text) {
-            controller.enqueue({ type: "text-delta", textDelta: res.text });
+          controller.enqueue({
+            type: "stream-start",
+            warnings: result.warnings,
+          });
+          if (textContent) {
+            controller.enqueue({ type: "text-start", id: textId });
+            controller.enqueue({ type: "text-delta", id: textId, delta: textContent.text });
+            controller.enqueue({ type: "text-end", id: textId });
           }
           controller.enqueue({
             type: "finish",
-            finishReason: res.finishReason,
-            usage: res.usage,
+            finishReason: result.finishReason,
+            usage: result.usage,
           });
           controller.close();
         },
       });
 
-      return { stream, rawCall: res.rawCall, warnings: [] };
+      return { stream };
     },
   };
 }
@@ -113,4 +120,3 @@ export function claudeCode(model: string, clientOptions?: any) {
 export function codex(model: string, clientOptions?: any) {
   return cliModel({ tool: "codex", model, clientOptions });
 }
-
