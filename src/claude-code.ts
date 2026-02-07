@@ -1,4 +1,4 @@
-import { execFile } from "node:child_process";
+import { spawn } from "node:child_process";
 
 export type ClaudeCodeModel = string;
 
@@ -38,37 +38,112 @@ function isRecord(v: unknown): v is Record<string, unknown> {
   return typeof v === "object" && v !== null;
 }
 
-function execFileAsync(
+function spawnAsync(
   file: string,
   args: string[],
-  opts: { cwd?: string; env?: NodeJS.ProcessEnv; timeoutMs?: number }
+  opts: {
+    cwd?: string;
+    env?: NodeJS.ProcessEnv;
+    timeoutMs?: number;
+    maxBufferBytes?: number;
+  }
 ) {
   return new Promise<{ stdout: string; stderr: string }>((resolve, reject) => {
-    execFile(
+    const child = spawn(
       file,
       args,
       {
         cwd: opts.cwd,
         env: opts.env,
-        timeout: opts.timeoutMs,
-        maxBuffer: 128 * 1024 * 1024,
-        encoding: "utf8",
+        stdio: ["ignore", "pipe", "pipe"],
       },
-      (err, stdout, stderr) => {
-        if (err) {
-          const code = (err as any).code ?? "?";
-          const signal = (err as any).signal ?? "?";
-          const killed = (err as any).killed ?? false;
-          const e = new Error(
-            `claude CLI failed (code=${code}, signal=${signal}, killed=${killed}): ${stderr || stdout}`
-          );
-          (e as any).cause = err;
-          reject(e);
-          return;
-        }
-        resolve({ stdout, stderr });
-      }
     );
+
+    const maxBufferBytes = opts.maxBufferBytes ?? 128 * 1024 * 1024;
+    let stdout = "";
+    let stderr = "";
+    let killedByTimeout = false;
+    let timeout: NodeJS.Timeout | null = null;
+    let hardKill: NodeJS.Timeout | null = null;
+
+    const cleanup = () => {
+      if (timeout) {
+        clearTimeout(timeout);
+        timeout = null;
+      }
+      if (hardKill) {
+        clearTimeout(hardKill);
+        hardKill = null;
+      }
+    };
+
+    const maybeKillOnBuffer = () => {
+      if (stdout.length + stderr.length > maxBufferBytes) {
+        try {
+          child.kill("SIGTERM");
+        } catch {
+          // ignore
+        }
+        const e = new Error("claude CLI output exceeded maxBufferBytes");
+        (e as any).code = "MAXBUFFER";
+        reject(e);
+        cleanup();
+      }
+    };
+
+    child.stdout?.setEncoding("utf8");
+    child.stderr?.setEncoding("utf8");
+
+    child.stdout?.on("data", (d: string) => {
+      stdout += d;
+      maybeKillOnBuffer();
+    });
+    child.stderr?.on("data", (d: string) => {
+      stderr += d;
+      maybeKillOnBuffer();
+    });
+
+    if (opts.timeoutMs && opts.timeoutMs > 0) {
+      timeout = setTimeout(() => {
+        killedByTimeout = true;
+        try {
+          child.kill("SIGTERM");
+        } catch {
+          // ignore
+        }
+        hardKill = setTimeout(() => {
+          try {
+            child.kill("SIGKILL");
+          } catch {
+            // ignore
+          }
+        }, 2000);
+      }, opts.timeoutMs);
+    }
+
+    child.on("error", (err) => {
+      cleanup();
+      const e = new Error(`claude CLI spawn error: ${String(err)}`);
+      (e as any).cause = err;
+      reject(e);
+    });
+
+    child.on("close", (code, signal) => {
+      cleanup();
+      if (code !== 0) {
+        const e = new Error(
+          `claude CLI failed (code=${code ?? "?"}, signal=${
+            signal ?? "?"
+          }, killed=${killedByTimeout}): ${stderr || stdout}`
+        );
+        (e as any).code = code;
+        (e as any).signal = signal;
+        (e as any).killed = killedByTimeout;
+        reject(e);
+        return;
+      }
+      resolve({ stdout, stderr });
+    });
   });
 }
 
@@ -118,7 +193,7 @@ export async function claudeCodeStructured<TStructured>(args: {
   let lastErr: unknown = null;
   for (let attempt = 0; attempt <= options.retries; attempt++) {
     try {
-      ({ stdout } = await execFileAsync(options.claudePath, cliArgs, {
+      ({ stdout } = await spawnAsync(options.claudePath, cliArgs, {
         cwd: options.cwd,
         env: options.env,
         timeoutMs: options.timeoutMs,
@@ -190,7 +265,7 @@ export async function claudeCodeText(args: {
   let lastErr: unknown = null;
   for (let attempt = 0; attempt <= options.retries; attempt++) {
     try {
-      ({ stdout } = await execFileAsync(options.claudePath, cliArgs, {
+      ({ stdout } = await spawnAsync(options.claudePath, cliArgs, {
         cwd: options.cwd,
         env: options.env,
         timeoutMs: options.timeoutMs,

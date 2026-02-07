@@ -12,6 +12,18 @@ This is designed for local Node apps where you want "model calls" to look like a
 - Node 20+
 - `claude` CLI installed and authenticated (Claude Code)
 
+## CLI Options
+
+`createClaudeCodeClient()` accepts:
+- `model` (default `"opus"`)
+- `maxBudgetUsd` (default `5`)
+- `timeoutMs` (default `120_000`)
+- `options.permissionMode` (default `"dontAsk"`)
+- `options.tools` (default `""` to disable all tools; pass `"default"` to enable built-ins)
+- `options.retries` (default `1`) and `options.retryDelayMs` (default `800`) for retry-on-timeout
+
+Note: `total_cost_usd` is reported by the Claude Code CLI. If you're using a subscription plan, this may be an estimate and not necessarily an incremental billed amount.
+
 ## Usage (Zod envelope)
 
 ```ts
