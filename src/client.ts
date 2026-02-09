@@ -1,6 +1,6 @@
 import { z } from "zod";
+import { toJSONSchema } from "zod/v4";
 import type { JSONSchema7 } from "@ai-sdk/provider";
-import { zodToJsonSchema } from "zod-to-json-schema";
 import {
   claudeCodeStructured,
   claudeCodeText,
@@ -27,12 +27,7 @@ export interface CliClient {
 }
 
 export function jsonSchemaFromZod(schema: z.ZodTypeAny): JSONSchema7 {
-  // Important: do NOT provide `name`. `zod-to-json-schema` wraps named schemas
-  // in a `$ref`/`definitions` envelope, which breaks Codex's `--output-schema`
-  // requirement that the root schema is `type: "object"`.
-  return zodToJsonSchema(schema, {
-    $refStrategy: "none",
-  }) as unknown as JSONSchema7;
+  return toJSONSchema(schema) as unknown as JSONSchema7;
 }
 
 export function createClaudeCodeClient(args?: {
