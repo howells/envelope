@@ -310,7 +310,7 @@ export function defaultGeminiOptions(
     debug: opts?.debug ?? false,
     policy: opts?.policy ?? [],
     adminPolicy: opts?.adminPolicy ?? [],
-    extensions: opts?.extensions ?? [],
+    extensions: opts?.extensions ?? [""],
     includeDirectories: opts?.includeDirectories ?? [],
   };
 }
