@@ -2,3 +2,11 @@ node_modules
 dist
 .DS_Store
 .trash
+
+# Standard entries
+.claude/settings.local.json
+.playwright-mcp/
+.turbo/
+.arc/
+*.tsbuildinfo
+.vercel

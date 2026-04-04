@@ -1,5 +1,22 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect } from "vitest";
 import { baseArgs, defaultOptions } from "./codex-cli.js";
+
+function collectFlagIndices(args: string[], flag: string) {
+  return args.reduce<number[]>((indices, value, index) => {
+    if (value === flag) {
+      indices.push(index);
+    }
+    return indices;
+  }, []);
+}
+
+function getRequiredIndex(indices: number[], position: number) {
+  const index = indices.at(position);
+  if (index == null) {
+    throw new Error(`Missing expected index at position ${position}`);
+  }
+  return index;
+}
 
 // ---------------------------------------------------------------------------
 // defaultOptions
@@ -12,7 +29,7 @@ describe("defaultOptions", () => {
     expect(opts.model).toBe("gpt-5.3-codex");
     expect(opts.timeoutMs).toBe(180_000);
     expect(opts.skipGitRepoCheck).toBe(true);
-    expect(opts.sandbox).toBe("danger-full-access");
+    expect(opts.sandbox).toBe("workspace-write");
     expect(opts.profile).toBe("");
     expect(opts.config).toEqual([]);
     expect(opts.jsonlEvents).toBe(false);
@@ -45,7 +62,7 @@ describe("baseArgs", () => {
     expect(args).toContain("--model");
     expect(args[args.indexOf("--model") + 1]).toBe("gpt-5.3-codex");
     expect(args).toContain("--sandbox");
-    expect(args[args.indexOf("--sandbox") + 1]).toBe("danger-full-access");
+    expect(args[args.indexOf("--sandbox") + 1]).toBe("workspace-write");
   });
 
   it("omits --skip-git-repo-check when false", () => {
@@ -64,13 +81,10 @@ describe("baseArgs", () => {
   it("repeats --config for each entry", () => {
     const opts = defaultOptions({ config: ["key1=val1", "key2=val2"] });
     const args = baseArgs(opts);
-    const indices = args.reduce<number[]>(
-      (acc, v, i) => (v === "--config" ? [...acc, i] : acc),
-      []
-    );
+    const indices = collectFlagIndices(args, "--config");
     expect(indices).toHaveLength(2);
-    expect(args[indices[0]! + 1]).toBe("key1=val1");
-    expect(args[indices[1]! + 1]).toBe("key2=val2");
+    expect(args[getRequiredIndex(indices, 0) + 1]).toBe("key1=val1");
+    expect(args[getRequiredIndex(indices, 1) + 1]).toBe("key2=val2");
   });
 
   it("includes --json when jsonlEvents is true", () => {
@@ -82,13 +96,10 @@ describe("baseArgs", () => {
   it("repeats --image for each file", () => {
     const opts = defaultOptions({ image: ["screenshot.png", "diagram.jpg"] });
     const args = baseArgs(opts);
-    const indices = args.reduce<number[]>(
-      (acc, v, i) => (v === "--image" ? [...acc, i] : acc),
-      []
-    );
+    const indices = collectFlagIndices(args, "--image");
     expect(indices).toHaveLength(2);
-    expect(args[indices[0]! + 1]).toBe("screenshot.png");
-    expect(args[indices[1]! + 1]).toBe("diagram.jpg");
+    expect(args[getRequiredIndex(indices, 0) + 1]).toBe("screenshot.png");
+    expect(args[getRequiredIndex(indices, 1) + 1]).toBe("diagram.jpg");
   });
 
   it("omits --image when array is empty", () => {

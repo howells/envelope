@@ -7,6 +7,38 @@ import {
   claudeCodeText,
 } from "./claude-code.js";
 
+interface MockStream extends EventEmitter {
+  setEncoding: ReturnType<typeof vi.fn>;
+}
+
+interface MockChild extends EventEmitter {
+  stdout: MockStream;
+  stderr: MockStream;
+  kill: ReturnType<typeof vi.fn>;
+}
+
+interface TimeoutError extends Error {
+  killed?: boolean;
+  signal?: string;
+}
+
+function collectFlagIndices(args: string[], flag: string) {
+  return args.reduce<number[]>((indices, value, index) => {
+    if (value === flag) {
+      indices.push(index);
+    }
+    return indices;
+  }, []);
+}
+
+function getRequiredIndex(indices: number[], position: number) {
+  const index = indices.at(position);
+  if (index == null) {
+    throw new Error(`Missing expected index at position ${position}`);
+  }
+  return index;
+}
+
 // ---------------------------------------------------------------------------
 // buildBaseArgs
 // ---------------------------------------------------------------------------
@@ -17,10 +49,11 @@ describe("buildBaseArgs", () => {
     const args = buildBaseArgs(opts);
 
     expect(args).toEqual([
-      "--model", "opus",
+      "--model",
+      "opus",
       "-p",
-      "--permission-mode", "dontAsk",
-      "--tools", "",
+      "--permission-mode",
+      "dontAsk",
     ]);
   });
 
@@ -35,20 +68,21 @@ describe("buildBaseArgs", () => {
     const opts = defaultClaudeOptions({ appendSystemPrompt: "Extra context." });
     const args = buildBaseArgs(opts);
     expect(args).toContain("--append-system-prompt");
-    expect(args[args.indexOf("--append-system-prompt") + 1]).toBe("Extra context.");
+    expect(args[args.indexOf("--append-system-prompt") + 1]).toBe(
+      "Extra context."
+    );
   });
 
   it("repeats --allowedTools for each entry", () => {
-    const opts = defaultClaudeOptions({ allowedTools: ["Read", "Write", "Bash"] });
+    const opts = defaultClaudeOptions({
+      allowedTools: ["Read", "Write", "Bash"],
+    });
     const args = buildBaseArgs(opts);
-    const indices = args.reduce<number[]>(
-      (acc, v, i) => (v === "--allowedTools" ? [...acc, i] : acc),
-      []
-    );
+    const indices = collectFlagIndices(args, "--allowedTools");
     expect(indices).toHaveLength(3);
-    expect(args[indices[0]! + 1]).toBe("Read");
-    expect(args[indices[1]! + 1]).toBe("Write");
-    expect(args[indices[2]! + 1]).toBe("Bash");
+    expect(args[getRequiredIndex(indices, 0) + 1]).toBe("Read");
+    expect(args[getRequiredIndex(indices, 1) + 1]).toBe("Write");
+    expect(args[getRequiredIndex(indices, 2) + 1]).toBe("Bash");
   });
 
   it("repeats --disallowedTools for each entry", () => {
@@ -66,15 +100,14 @@ describe("buildBaseArgs", () => {
   });
 
   it("repeats --betas for each entry", () => {
-    const opts = defaultClaudeOptions({ betas: ["interleaved-thinking", "extended-thinking"] });
+    const opts = defaultClaudeOptions({
+      betas: ["interleaved-thinking", "extended-thinking"],
+    });
     const args = buildBaseArgs(opts);
-    const indices = args.reduce<number[]>(
-      (acc, v, i) => (v === "--betas" ? [...acc, i] : acc),
-      []
-    );
+    const indices = collectFlagIndices(args, "--betas");
     expect(indices).toHaveLength(2);
-    expect(args[indices[0]! + 1]).toBe("interleaved-thinking");
-    expect(args[indices[1]! + 1]).toBe("extended-thinking");
+    expect(args[getRequiredIndex(indices, 0) + 1]).toBe("interleaved-thinking");
+    expect(args[getRequiredIndex(indices, 1) + 1]).toBe("extended-thinking");
   });
 
   it("includes --agent when set", () => {
@@ -94,6 +127,7 @@ describe("buildBaseArgs", () => {
   it("omits optional flags when defaults are empty", () => {
     const opts = defaultClaudeOptions();
     const args = buildBaseArgs(opts);
+    expect(args).not.toContain("--tools");
     expect(args).not.toContain("--system-prompt");
     expect(args).not.toContain("--append-system-prompt");
     expect(args).not.toContain("--allowedTools");
@@ -102,6 +136,13 @@ describe("buildBaseArgs", () => {
     expect(args).not.toContain("--betas");
     expect(args).not.toContain("--agent");
     expect(args).not.toContain("--agents");
+  });
+
+  it("includes --tools when explicitly set", () => {
+    const opts = defaultClaudeOptions({ tools: "default" });
+    const args = buildBaseArgs(opts);
+    expect(args).toContain("--tools");
+    expect(args[args.indexOf("--tools") + 1]).toBe("default");
   });
 
   it("respects non-default permissionMode", () => {
@@ -155,14 +196,14 @@ describe("defaultClaudeOptions", () => {
 // ---------------------------------------------------------------------------
 
 function createMockChild(stdout: string, exitCode: number, signal?: string) {
-  const child = new EventEmitter();
-  const stdoutStream = new EventEmitter();
-  const stderrStream = new EventEmitter();
-  (stdoutStream as any).setEncoding = vi.fn();
-  (stderrStream as any).setEncoding = vi.fn();
-  (child as any).stdout = stdoutStream;
-  (child as any).stderr = stderrStream;
-  (child as any).kill = vi.fn();
+  const child = new EventEmitter() as MockChild;
+  const stdoutStream = new EventEmitter() as MockStream;
+  const stderrStream = new EventEmitter() as MockStream;
+  stdoutStream.setEncoding = vi.fn();
+  stderrStream.setEncoding = vi.fn();
+  child.stdout = stdoutStream;
+  child.stderr = stderrStream;
+  child.kill = vi.fn();
 
   setTimeout(() => {
     stdoutStream.emit("data", stdout);
@@ -172,7 +213,7 @@ function createMockChild(stdout: string, exitCode: number, signal?: string) {
   return child;
 }
 
-let nextChild: EventEmitter | null = null;
+let nextChild: MockChild | null = null;
 
 vi.mock("node:child_process", () => ({
   spawn: vi.fn((..._args: unknown[]) => {
@@ -186,7 +227,7 @@ vi.mock("node:child_process", () => ({
 }));
 
 function setNextChild(child: EventEmitter) {
-  nextChild = child;
+  nextChild = child as MockChild;
 }
 
 // ---------------------------------------------------------------------------
@@ -230,7 +271,8 @@ describe("claudeCodeStructured", () => {
   });
 
   it("passes all args to spawn", async () => {
-    const { spawn } = await import("node:child_process") as any;
+    const { spawn } = await import("node:child_process");
+    const mockedSpawn = vi.mocked(spawn);
     const envelope = { result: "ok", structured_output: {} };
     setNextChild(createMockChild(JSON.stringify(envelope), 0));
 
@@ -245,7 +287,10 @@ describe("claudeCodeStructured", () => {
       },
     });
 
-    const spawnCall = spawn.mock.calls[spawn.mock.calls.length - 1]!;
+    const spawnCall = mockedSpawn.mock.calls.at(-1);
+    if (!spawnCall) {
+      throw new Error("Expected spawn to be called");
+    }
     const args: string[] = spawnCall[1];
     expect(args).toContain("--model");
     expect(args[args.indexOf("--model") + 1]).toBe("sonnet");
@@ -254,7 +299,7 @@ describe("claudeCodeStructured", () => {
     expect(args).toContain("--allowedTools");
     expect(args[args.indexOf("--allowedTools") + 1]).toBe("Read");
     expect(args).toContain("--json-schema");
-    expect(args[args.length - 1]).toBe("hello");
+    expect(args.at(-1)).toBe("hello");
   });
 });
 
@@ -264,9 +309,7 @@ describe("claudeCodeStructured", () => {
 
 describe("claudeCodeText", () => {
   it("extracts result from JSON envelope", async () => {
-    setNextChild(
-      createMockChild(JSON.stringify({ result: "hello world" }), 0)
-    );
+    setNextChild(createMockChild(JSON.stringify({ result: "hello world" }), 0));
 
     const res = await claudeCodeText({ prompt: "test" });
     expect(res.text).toBe("hello world");
@@ -285,6 +328,19 @@ describe("claudeCodeText", () => {
     const res = await claudeCodeText({ prompt: "test" });
     expect(res.text).toBe('"just a string"');
   });
+
+  it("throws on error envelope", async () => {
+    setNextChild(
+      createMockChild(
+        JSON.stringify({ is_error: true, subtype: "rate_limit" }),
+        0
+      )
+    );
+
+    await expect(claudeCodeText({ prompt: "test" })).rejects.toThrow(
+      "rate_limit"
+    );
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -293,27 +349,28 @@ describe("claudeCodeText", () => {
 
 describe("retry on timeout", () => {
   it("retries after a timeout kill and succeeds", async () => {
-    const { spawn } = await import("node:child_process") as any;
+    const { spawn } = await import("node:child_process");
+    const mockedSpawn = vi.mocked(spawn);
 
     let callCount = 0;
-    spawn.mockImplementation(() => {
+    mockedSpawn.mockImplementation(() => {
       callCount++;
-      const child = new EventEmitter();
-      const stdoutStream = new EventEmitter();
-      const stderrStream = new EventEmitter();
-      (stdoutStream as any).setEncoding = vi.fn();
-      (stderrStream as any).setEncoding = vi.fn();
-      (child as any).stdout = stdoutStream;
-      (child as any).stderr = stderrStream;
-      (child as any).kill = vi.fn();
+      const child = new EventEmitter() as MockChild;
+      const stdoutStream = new EventEmitter() as MockStream;
+      const stderrStream = new EventEmitter() as MockStream;
+      stdoutStream.setEncoding = vi.fn();
+      stderrStream.setEncoding = vi.fn();
+      child.stdout = stdoutStream;
+      child.stderr = stderrStream;
+      child.kill = vi.fn();
 
       setTimeout(() => {
         if (callCount === 1) {
           // Emit "error" with the shape isTimeoutKill expects (.killed + .signal).
           // spawnAsync wraps this as .cause, and the retry logic checks the cause.
-          const err = new Error("timeout");
-          (err as any).killed = true;
-          (err as any).signal = "SIGTERM";
+          const err = new Error("timeout") as TimeoutError;
+          err.killed = true;
+          err.signal = "SIGTERM";
           child.emit("error", err);
         } else {
           stdoutStream.emit("data", JSON.stringify({ result: "retry worked" }));
@@ -332,7 +389,7 @@ describe("retry on timeout", () => {
     expect(callCount).toBe(2);
 
     // Reset mock to default behavior
-    spawn.mockImplementation((..._args: unknown[]) => {
+    mockedSpawn.mockImplementation((..._args: unknown[]) => {
       return createMockChild(JSON.stringify({ result: "ok" }), 0);
     });
   });

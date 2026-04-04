@@ -83,7 +83,9 @@ describe("createEnvelope", () => {
       client,
     });
 
-    await expect(envelope({ text: "valid input" })).rejects.toThrow(EnvelopeError);
+    await expect(envelope({ text: "valid input" })).rejects.toThrow(
+      EnvelopeError
+    );
   });
 
   it("passes jsonSchema to client.structured", async () => {
@@ -96,7 +98,11 @@ describe("createEnvelope", () => {
     });
 
     await envelope({ text: "hi" });
-    const call = (client.structured as ReturnType<typeof vi.fn>).mock.calls[0]![0];
+    const call = (client.structured as ReturnType<typeof vi.fn>).mock
+      .calls[0]?.[0];
+    if (!call) {
+      throw new Error("Expected structured client call to be recorded");
+    }
     expect(call.jsonSchema).toBeDefined();
     expect(call.jsonSchema.type).toBe("object");
   });

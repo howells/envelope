@@ -1,6 +1,6 @@
 import { useState } from "react";
 
-type CliOption = "claude-code" | "codex";
+type CliOption = "claude-code" | "codex" | "gemini";
 type OutputType = "text" | "json";
 
 const DEFAULT_SCHEMA = JSON.stringify(
@@ -13,7 +13,7 @@ const DEFAULT_SCHEMA = JSON.stringify(
     required: ["answer", "confidence"],
   },
   null,
-  2,
+  2
 );
 
 export function App() {
@@ -27,7 +27,9 @@ export function App() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!prompt.trim() || loading) return;
+    if (!prompt.trim() || loading) {
+      return;
+    }
 
     setLoading(true);
     setResponse("");
@@ -47,10 +49,10 @@ export function App() {
 
       const data = await res.json();
 
-      if (!res.ok) {
-        setError(data.error ?? `HTTP ${res.status}`);
-      } else {
+      if (res.ok) {
         setResponse(data.text);
+      } else {
+        setError(data.error ?? `HTTP ${res.status}`);
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Request failed");
@@ -83,6 +85,7 @@ export function App() {
           >
             <option value="claude-code">Claude Code</option>
             <option value="codex">Codex</option>
+            <option value="gemini">Gemini</option>
           </select>
 
           <div className="toggle">

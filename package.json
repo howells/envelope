@@ -1,8 +1,8 @@
 {
   "name": "@howells/envelope",
-  "version": "0.2.0",
+  "version": "0.2.2",
   "private": false,
-  "description": "Strict Zod IO wrapper around local CLI LLMs (Claude Code, Codex), plus an AI SDK adapter.",
+  "description": "Strict Zod IO wrapper around local CLI LLMs (Claude Code, Codex, Gemini), plus an AI SDK adapter.",
   "type": "module",
   "sideEffects": false,
   "license": "MIT",
@@ -39,27 +39,40 @@
     "dev": "tsc -p tsconfig.json -w",
     "prepack": "pnpm build",
     "test": "vitest run",
-    "typecheck": "tsc -p tsconfig.json --noEmit"
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "prepare": "husky",
+    "format": "ultracite fix --unsafe",
+    "lint": "biome lint .",
+    "knip": "knip"
   },
   "keywords": [
     "llm",
     "cli",
     "claude",
     "codex",
+    "gemini",
     "zod",
     "ai-sdk"
   ],
   "dependencies": {
-    "@ai-sdk/provider": "^3.0.0"
+    "@ai-sdk/provider": "^3.0.8"
   },
   "peerDependencies": {
     "zod": "^4.0.0"
   },
   "devDependencies": {
-    "@types/node": "^22.0.0",
-    "typescript": "^5.7.0",
-    "vitest": "^4.0.18",
+    "@biomejs/biome": "^2.4.10",
+    "@types/node": "^25.5.2",
+    "husky": "^9.1.7",
+    "knip": "^6.3.0",
+    "lint-staged": "^16.4.0",
+    "typescript": "^6.0.2",
+    "ultracite": "^7.4.3",
+    "vitest": "^4.1.2",
     "zod": "^4.3.6"
   },
-  "packageManager": "pnpm@10.12.4"
+  "packageManager": "pnpm@10.12.4",
+  "lint-staged": {
+    "*.{js,ts,jsx,tsx,json,jsonc,css}": "biome format --write --no-errors-on-unmatched"
+  }
 }

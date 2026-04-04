@@ -1,13 +1,18 @@
 import { describe, it, expect } from "vitest";
 import { z } from "zod";
-import { jsonSchemaFromZod, createClaudeCodeClient, createCodexClient } from "./client.js";
+import {
+  jsonSchemaFromZod,
+  createClaudeCodeClient,
+  createCodexClient,
+  createGeminiClient,
+} from "./client.js";
 
 // ---------------------------------------------------------------------------
 // jsonSchemaFromZod
 // ---------------------------------------------------------------------------
 
 describe("jsonSchemaFromZod", () => {
-  it("produces a schema without $ref", () => {
+  it("produces a schema without $ref or $schema", () => {
     const schema = z.object({
       name: z.string(),
       age: z.number(),
@@ -16,6 +21,7 @@ describe("jsonSchemaFromZod", () => {
 
     expect(json.type).toBe("object");
     expect(JSON.stringify(json)).not.toContain("$ref");
+    expect(json).not.toHaveProperty("$schema");
   });
 
   it("handles nested objects without definitions wrapper", () => {
@@ -41,7 +47,7 @@ describe("jsonSchemaFromZod", () => {
 
     expect(json.type).toBe("object");
     const props = json.properties as Record<string, { type: string }>;
-    expect(props?.["items"]?.type).toBe("array");
+    expect(props?.items?.type).toBe("array");
   });
 
   it("handles enums", () => {
@@ -52,7 +58,7 @@ describe("jsonSchemaFromZod", () => {
 
     expect(json.type).toBe("object");
     const props = json.properties as Record<string, { enum?: string[] }>;
-    expect(props?.["status"]?.enum).toEqual(["active", "inactive"]);
+    expect(props?.status?.enum).toEqual(["active", "inactive"]);
   });
 });
 
@@ -96,5 +102,26 @@ describe("createCodexClient", () => {
     });
     expect(client.tool).toBe("codex");
     expect(client.model).toBe("o3");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// createGeminiClient
+// ---------------------------------------------------------------------------
+
+describe("createGeminiClient", () => {
+  it("creates a client with defaults", () => {
+    const client = createGeminiClient();
+    expect(client.tool).toBe("gemini");
+    expect(client.model).toBe("gemini-3-flash-preview");
+  });
+
+  it("accepts custom model and options", () => {
+    const client = createGeminiClient({
+      model: "gemini-2.5-pro",
+      options: { approvalMode: "plan" },
+    });
+    expect(client.tool).toBe("gemini");
+    expect(client.model).toBe("gemini-2.5-pro");
   });
 });
