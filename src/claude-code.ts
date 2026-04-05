@@ -16,6 +16,26 @@ export type ClaudeCodeModel = string;
  */
 export interface ClaudeCodeOptions {
   /**
+   * Name of a custom agent to use for the session.
+   */
+  agent?: string;
+  /**
+   * JSON string describing custom agents for the session, forwarded to `--agents`.
+   */
+  agents?: string;
+  /**
+   * Tool allow-list entries, each emitted as a separate `--allowedTools` flag.
+   */
+  allowedTools?: string[];
+  /**
+   * Appends additional content to the default Claude system prompt.
+   */
+  appendSystemPrompt?: string;
+  /**
+   * Beta feature headers to pass through to Claude Code.
+   */
+  betas?: string[];
+  /**
    * Executable path for the Claude Code binary.
    *
    * Defaults to `"claude"` and relies on the binary being available on `PATH`.
@@ -28,32 +48,27 @@ export interface ClaudeCodeOptions {
    */
   cwd?: string;
   /**
+   * Tool deny-list entries, each emitted as a separate `--disallowedTools` flag.
+   */
+  disallowedTools?: string[];
+  /**
    * Environment variables passed to the child process.
    *
    * Defaults to the current process environment.
    */
   env?: NodeJS.ProcessEnv;
   /**
-   * Claude model alias or fully-qualified model name.
+   * Fallback model used by Claude Code when the primary model is overloaded.
    */
-  model?: ClaudeCodeModel;
+  fallbackModel?: string;
   /**
    * Budget cap, in USD, passed through `--max-budget-usd`.
    */
   maxBudgetUsd?: number;
   /**
-   * Maximum time to allow the subprocess to run before attempting termination.
+   * Claude model alias or fully-qualified model name.
    */
-  timeoutMs?: number;
-  /**
-   * Number of retries after a timeout (SIGTERM kill) or transient failure.
-   * Total attempts = 1 + retries.
-   */
-  retries?: number;
-  /**
-   * Base delay between retries (ms). Uses simple linear backoff by attempt.
-   */
-  retryDelayMs?: number;
+  model?: ClaudeCodeModel;
   /**
    * Claude Code permission mode.
    *
@@ -67,44 +82,29 @@ export interface ClaudeCodeOptions {
     | "bypassPermissions"
     | "auto";
   /**
+   * Number of retries after a timeout (SIGTERM kill) or transient failure.
+   * Total attempts = 1 + retries.
+   */
+  retries?: number;
+  /**
+   * Base delay between retries (ms). Uses simple linear backoff by attempt.
+   */
+  retryDelayMs?: number;
+  /**
+   * Replaces the default Claude system prompt.
+   */
+  systemPrompt?: string;
+  /**
+   * Maximum time to allow the subprocess to run before attempting termination.
+   */
+  timeoutMs?: number;
+  /**
    * Built-in tool configuration.
    *
    * An empty string omits the `--tools` flag entirely. Use `"default"` to opt into the
    * CLI's default tool set, or provide explicit tool names as supported by Claude Code.
    */
   tools?: string;
-  /**
-   * Replaces the default Claude system prompt.
-   */
-  systemPrompt?: string;
-  /**
-   * Appends additional content to the default Claude system prompt.
-   */
-  appendSystemPrompt?: string;
-  /**
-   * Tool allow-list entries, each emitted as a separate `--allowedTools` flag.
-   */
-  allowedTools?: string[];
-  /**
-   * Tool deny-list entries, each emitted as a separate `--disallowedTools` flag.
-   */
-  disallowedTools?: string[];
-  /**
-   * Fallback model used by Claude Code when the primary model is overloaded.
-   */
-  fallbackModel?: string;
-  /**
-   * Beta feature headers to pass through to Claude Code.
-   */
-  betas?: string[];
-  /**
-   * Name of a custom agent to use for the session.
-   */
-  agent?: string;
-  /**
-   * JSON string describing custom agents for the session, forwarded to `--agents`.
-   */
-  agents?: string;
 }
 
 /**
@@ -114,22 +114,22 @@ export interface ClaudeCodeOptions {
  * generation is requested.
  */
 export interface ClaudeCodeEnvelope<TStructured> {
-  type?: string;
-  subtype?: string;
   is_error?: boolean;
-  result?: string;
-  structured_output?: TStructured;
-  total_cost_usd?: number;
-  stop_reason?: string | null;
-  session_id?: string;
   permission_denials?: unknown[];
+  result?: string;
+  session_id?: string;
+  stop_reason?: string | null;
+  structured_output?: TStructured;
+  subtype?: string;
+  total_cost_usd?: number;
+  type?: string;
 }
 
 interface ClaudeCliError extends Error {
-  code?: number | string | null;
-  signal?: NodeJS.Signals | null;
-  killed?: boolean;
   cause?: unknown;
+  code?: number | string | null;
+  killed?: boolean;
+  signal?: NodeJS.Signals | null;
 }
 
 /**
@@ -535,5 +535,10 @@ export async function claudeCodeText(args: {
       `claude CLI error envelope: ${envelope.subtype ?? "unknown"}`
     );
   }
-  return { text: envelope.result ?? "" };
+  return {
+    text: envelope.result ?? "",
+    total_cost_usd: envelope.total_cost_usd,
+    session_id: envelope.session_id,
+    stop_reason: envelope.stop_reason,
+  };
 }

@@ -1,17 +1,35 @@
+import type { JSONSchema7 } from "@ai-sdk/provider";
 import type { z } from "zod";
 import { toJSONSchema } from "zod/v4";
-import type { JSONSchema7 } from "@ai-sdk/provider";
 import {
+  type ClaudeCodeOptions,
   claudeCodeStructured,
   claudeCodeText,
-  type ClaudeCodeOptions,
 } from "./claude-code.js";
-import { codexStructured, codexText, type CodexOptions } from "./codex-cli.js";
+import { type CodexOptions, codexStructured, codexText } from "./codex-cli.js";
 import {
+  type GeminiOptions,
   geminiStructured,
   geminiText,
-  type GeminiOptions,
 } from "./gemini-cli.js";
+
+function extractClaudeMeta(envelope: {
+  total_cost_usd?: number;
+  session_id?: string;
+  stop_reason?: string | null;
+}): CliResultMeta {
+  return {
+    ...(envelope.total_cost_usd !== undefined && {
+      costUsd: envelope.total_cost_usd,
+    }),
+    ...(envelope.session_id !== undefined && {
+      sessionId: envelope.session_id,
+    }),
+    ...(envelope.stop_reason !== undefined && {
+      stopReason: envelope.stop_reason,
+    }),
+  };
+}
 
 /**
  * Identifies the backing CLI used by a {@link CliClient}.
@@ -33,13 +51,25 @@ export interface GenerateTextArgs {
  */
 export interface GenerateStructuredArgs {
   /**
-   * Prompt text to send to the model.
-   */
-  prompt: string;
-  /**
    * JSON Schema describing the final response shape expected from the model.
    */
   jsonSchema: JSONSchema7;
+  /**
+   * Prompt text to send to the model.
+   */
+  prompt: string;
+}
+
+/**
+ * Optional metadata returned alongside CLI responses.
+ *
+ * Not all CLI backends populate every field. Claude Code provides cost data;
+ * Codex and Gemini currently return no metadata.
+ */
+export interface CliResultMeta {
+  costUsd?: number;
+  sessionId?: string;
+  stopReason?: string | null;
 }
 
 /**
@@ -52,23 +82,25 @@ export interface GenerateStructuredArgs {
  */
 export interface CliClient {
   /**
-   * Name of the backing CLI implementation.
-   */
-  tool: CliTool;
-  /**
    * Model identifier configured for this client.
    */
   model: string;
-  /**
-   * Executes a plain-text completion request.
-   */
-  text(args: GenerateTextArgs): Promise<{ text: string }>;
   /**
    * Executes a structured generation request and returns already-parsed output.
    *
    * @typeParam T - Expected structured response shape.
    */
-  structured<T>(args: GenerateStructuredArgs): Promise<{ structured: T }>;
+  structured<T>(
+    args: GenerateStructuredArgs
+  ): Promise<{ structured: T; meta?: CliResultMeta }>;
+  /**
+   * Executes a plain-text completion request.
+   */
+  text(args: GenerateTextArgs): Promise<{ text: string; meta?: CliResultMeta }>;
+  /**
+   * Name of the backing CLI implementation.
+   */
+  tool: CliTool;
 }
 
 /**
@@ -134,7 +166,10 @@ export function createClaudeCodeClient(args?: {
         prompt: input.prompt,
         options: { ...cfg?.options, model, maxBudgetUsd, timeoutMs },
       });
-      return { text: res.text };
+      return {
+        text: res.text,
+        meta: extractClaudeMeta(res),
+      };
     },
     async structured<T>(input: GenerateStructuredArgs) {
       const envelope = await claudeCodeStructured<T>({
@@ -142,7 +177,10 @@ export function createClaudeCodeClient(args?: {
         jsonSchema: JSON.stringify(input.jsonSchema),
         options: { ...cfg?.options, model, maxBudgetUsd, timeoutMs },
       });
-      return { structured: envelope.structured_output as T };
+      return {
+        structured: envelope.structured_output as T,
+        meta: extractClaudeMeta(envelope),
+      };
     },
   };
 }

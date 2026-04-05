@@ -1,5 +1,5 @@
-import { describe, expect, it, vi } from "vitest";
 import EventEmitter from "node:events";
+import { describe, expect, it, vi } from "vitest";
 import {
   buildGeminiArgs,
   defaultGeminiOptions,
@@ -12,9 +12,9 @@ interface MockStream extends EventEmitter {
 }
 
 interface MockChild extends EventEmitter {
-  stdout: MockStream;
-  stderr: MockStream;
   kill: ReturnType<typeof vi.fn>;
+  stderr: MockStream;
+  stdout: MockStream;
 }
 
 function createMockChild(stdout: string, exitCode: number, signal?: string) {
@@ -71,7 +71,7 @@ describe("defaultGeminiOptions", () => {
     expect(opts.debug).toBe(false);
     expect(opts.policy).toEqual([]);
     expect(opts.adminPolicy).toEqual([]);
-    expect(opts.extensions).toEqual([]);
+    expect(opts.extensions).toEqual([""]);
     expect(opts.includeDirectories).toEqual([]);
   });
 
@@ -97,6 +97,8 @@ describe("buildGeminiArgs", () => {
       "gemini-3-flash-preview",
       "--approval-mode",
       "plan",
+      "--extensions",
+      "",
     ]);
   });
 

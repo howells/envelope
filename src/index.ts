@@ -8,40 +8,40 @@
  * - low-level CLI wrappers for callers that need direct access to the subprocess semantics.
  */
 // Core API
-export {
-  createEnvelope,
-  EnvelopeError,
-  type CreateEnvelopeArgs,
-} from "./envelope.js";
-
-export {
-  createClaudeCodeClient,
-  createCodexClient,
-  createGeminiClient,
-  jsonSchemaFromZod,
-  type CliClient,
-  type CliTool,
-  type GenerateTextArgs,
-  type GenerateStructuredArgs,
-} from "./client.js";
 
 // CLI-level API (for power users who need direct CLI access)
 export {
+  type ClaudeCodeOptions,
   claudeCodeStructured,
   claudeCodeText,
-  type ClaudeCodeOptions,
 } from "./claude-code.js";
 
 export {
+  type CliClient,
+  type CliResultMeta,
+  type CliTool,
+  createClaudeCodeClient,
+  createCodexClient,
+  createGeminiClient,
+  type GenerateStructuredArgs,
+  type GenerateTextArgs,
+  jsonSchemaFromZod,
+} from "./client.js";
+export {
+  type CodexOptions,
   codexStructured,
   codexText,
-  type CodexOptions,
 } from "./codex-cli.js";
+export {
+  type CreateEnvelopeArgs,
+  createEnvelope,
+  EnvelopeError,
+} from "./envelope.js";
 
 export {
   buildGeminiArgs,
   defaultGeminiOptions,
+  type GeminiOptions,
   geminiStructured,
   geminiText,
-  type GeminiOptions,
 } from "./gemini-cli.js";

@@ -1,6 +1,6 @@
-// AI SDK v2 adapter for CLI tools (Claude Code, Codex, Gemini).
+// AI SDK v3 adapter for CLI tools (Claude Code, Codex, Gemini).
 //
-// Implements LanguageModelV2 from @ai-sdk/provider >=3, compatible with ai@6.
+// Implements LanguageModelV3 from @ai-sdk/provider >=3, compatible with ai@6.
 // Text-first; for JSON mode it maps responseFormat.schema to the CLI's
 // structured-output mode.
 
@@ -9,17 +9,24 @@ import {
   type ReadableStreamDefaultController,
 } from "node:stream/web";
 import type {
+  JSONObject,
   JSONSchema7,
-  LanguageModelV2,
-  LanguageModelV2CallOptions,
-  LanguageModelV2StreamPart,
+  LanguageModelV3,
+  LanguageModelV3CallOptions,
+  LanguageModelV3FinishReason,
+  LanguageModelV3GenerateResult,
+  LanguageModelV3StreamPart,
+  LanguageModelV3Usage,
+  SharedV3ProviderMetadata,
+  SharedV3Warning,
 } from "@ai-sdk/provider";
 import {
+  type CliClient,
+  type CliResultMeta,
+  type CliTool,
   createClaudeCodeClient,
   createCodexClient,
   createGeminiClient,
-  type CliClient,
-  type CliTool,
 } from "./client.js";
 
 type ClaudeModelOptions = Parameters<typeof createClaudeCodeClient>[0];
@@ -29,54 +36,115 @@ type CliModelOptions =
   | ClaudeModelOptions
   | CodexModelOptions
   | GeminiModelOptions;
-interface PromptTextPart {
-  type: "text";
-  text: string;
-}
 
-function isPromptTextPart(part: { type: string }): part is PromptTextPart {
-  return (
-    part.type === "text" &&
-    "text" in part &&
-    typeof (part as PromptTextPart).text === "string"
-  );
-}
+const UNSUPPORTED_PARAMS = [
+  "temperature",
+  "topP",
+  "topK",
+  "presencePenalty",
+  "frequencyPenalty",
+  "stopSequences",
+  "seed",
+] as const;
 
 /**
- * Extracts and concatenates text parts from an AI SDK content array.
+ * Collects warnings for AI SDK parameters that CLI tools silently ignore.
+ */
+function collectWarnings(
+  options: LanguageModelV3CallOptions
+): SharedV3Warning[] {
+  const warnings: SharedV3Warning[] = [];
+  for (const param of UNSUPPORTED_PARAMS) {
+    const value = options[param as keyof LanguageModelV3CallOptions];
+    if (value === undefined) {
+      continue;
+    }
+    if (Array.isArray(value) && value.length === 0) {
+      continue;
+    }
+    warnings.push({
+      type: "unsupported",
+      feature: param,
+      details: `CLI tools do not support ${param}. It will be ignored.`,
+    });
+  }
+
+  if (
+    options.responseFormat?.type === "json" &&
+    !options.responseFormat.schema
+  ) {
+    warnings.push({
+      type: "unsupported",
+      feature: "responseFormat",
+      details:
+        "JSON response format requires a schema for CLI providers. The request will be treated as plain text.",
+    });
+  }
+
+  return warnings;
+}
+
+function emptyUsage(): LanguageModelV3Usage {
+  return {
+    inputTokens: {
+      total: undefined,
+      noCache: undefined,
+      cacheRead: undefined,
+      cacheWrite: undefined,
+    },
+    outputTokens: {
+      total: undefined,
+      text: undefined,
+      reasoning: undefined,
+    },
+  };
+}
+
+function metaToProviderMetadata(
+  meta: CliResultMeta | undefined
+): SharedV3ProviderMetadata | undefined {
+  if (!(meta?.costUsd || meta?.sessionId)) {
+    return undefined;
+  }
+  return {
+    envelope: {
+      ...(meta.costUsd !== undefined && { costUsd: meta.costUsd }),
+      ...(meta.sessionId !== undefined && { sessionId: meta.sessionId }),
+    } as JSONObject,
+  };
+}
+
+const STOP_FINISH: LanguageModelV3FinishReason = {
+  unified: "stop",
+  raw: undefined,
+};
+
+/**
+ * Extracts and concatenates text parts from a V3 prompt content array.
  *
- * The adapter is intentionally text-first. Non-text prompt parts are rejected explicitly
+ * The adapter is intentionally text-first. Non-text prompt parts are rejected
  * so callers do not accidentally lose multimodal content without noticing.
- *
- * @param content - Prompt content parts supplied by the AI SDK.
- * @returns The concatenated text payload.
- * @throws {Error} Thrown when a non-text part is encountered.
  */
 function extractText(content: ReadonlyArray<{ type: string }>): string {
   const parts: string[] = [];
   for (const part of content) {
-    if (!isPromptTextPart(part)) {
+    if (part.type !== "text" || !("text" in part)) {
       throw new Error(
         `Envelope CLI adapter only supports text prompt parts, received: ${part.type}`
       );
     }
-    parts.push(part.text);
+    parts.push((part as { type: "text"; text: string }).text);
   }
   return parts.join("");
 }
 
 /**
- * Converts an AI SDK v2 prompt array into the single prompt string expected by the
- * package's CLI wrappers.
+ * Converts a V3 prompt array into the single prompt string expected by CLI wrappers.
  *
- * Each message is prefixed with its role so some conversational structure is preserved
- * when flattening the prompt into a single text blob.
- *
- * @param prompt - AI SDK v2 prompt representation.
- * @returns Flattened prompt text suitable for the CLI clients.
- * @throws {Error} Thrown when unsupported content shapes are encountered.
+ * Each message is prefixed with its role so conversational structure is preserved
+ * when flattening into a single text blob.
  */
-function v2PromptToText(prompt: LanguageModelV2CallOptions["prompt"]): string {
+function promptToText(prompt: LanguageModelV3CallOptions["prompt"]): string {
   const parts: string[] = [];
   for (const m of prompt) {
     if (m.role === "system") {
@@ -98,14 +166,6 @@ function v2PromptToText(prompt: LanguageModelV2CallOptions["prompt"]): string {
   return parts.join("\n");
 }
 
-/**
- * Creates the package's internal {@link CliClient} for the requested CLI tool.
- *
- * @param tool - Backing CLI implementation to instantiate.
- * @param model - Model identifier to bind to the client.
- * @param opts - Additional client factory options.
- * @returns A configured client implementation for the selected tool.
- */
 function makeClient(
   tool: CliTool,
   model: string,
@@ -130,19 +190,12 @@ function makeClient(
 }
 
 /**
- * Creates an AI SDK `LanguageModelV2` implementation backed by one of the local CLI clients.
+ * Creates an AI SDK `LanguageModelV3` implementation backed by one of the local CLI clients.
  *
  * This adapter exists so code using `ai@6` can route calls through local Claude Code,
  * Codex, or Gemini binaries instead of a network provider. The adapter is intentionally
- * text-first:
- * it flattens prompts into a single string and simulates streaming by emitting a single
- * final text chunk.
- *
- * @param args - Adapter configuration.
- * @param args.tool - Backing CLI implementation.
- * @param args.model - Model identifier passed through to the selected CLI.
- * @param args.clientOptions - Additional options forwarded to the selected client factory.
- * @returns A `LanguageModelV2` object suitable for `generateText()` and related AI SDK APIs.
+ * text-first: it flattens prompts into a single string and simulates streaming by
+ * emitting a single final text chunk.
  *
  * @example
  * ```ts
@@ -157,17 +210,20 @@ export function cliModel(args: {
   tool: CliTool;
   model: string;
   clientOptions?: CliModelOptions;
-}): LanguageModelV2 {
+}): LanguageModelV3 {
   const client = makeClient(args.tool, args.model, args.clientOptions);
 
   return {
-    specificationVersion: "v2",
+    specificationVersion: "v3",
     provider: args.tool,
     modelId: args.model,
     supportedUrls: {},
 
-    async doGenerate(callOptions: LanguageModelV2CallOptions) {
-      const promptText = v2PromptToText(callOptions.prompt);
+    async doGenerate(
+      callOptions: LanguageModelV3CallOptions
+    ): Promise<LanguageModelV3GenerateResult> {
+      const promptText = promptToText(callOptions.prompt);
+      const warnings = collectWarnings(callOptions);
 
       // Structured JSON output mode
       if (
@@ -182,13 +238,10 @@ export function cliModel(args: {
         const text = JSON.stringify(res.structured ?? null);
         return {
           content: [{ type: "text" as const, text }],
-          finishReason: "stop" as const,
-          usage: {
-            inputTokens: undefined,
-            outputTokens: undefined,
-            totalTokens: undefined,
-          },
-          warnings: [],
+          finishReason: STOP_FINISH,
+          usage: emptyUsage(),
+          providerMetadata: metaToProviderMetadata(res.meta),
+          warnings,
         };
       }
 
@@ -196,27 +249,24 @@ export function cliModel(args: {
       const res = await client.text({ prompt: promptText });
       return {
         content: [{ type: "text" as const, text: res.text }],
-        finishReason: "stop" as const,
-        usage: {
-          inputTokens: undefined,
-          outputTokens: undefined,
-          totalTokens: undefined,
-        },
-        warnings: [],
+        finishReason: STOP_FINISH,
+        usage: emptyUsage(),
+        providerMetadata: metaToProviderMetadata(res.meta),
+        warnings,
       };
     },
 
-    async doStream(callOptions: LanguageModelV2CallOptions) {
-      // CLI tools don't truly stream, so we fake it with a single chunk.
+    async doStream(callOptions: LanguageModelV3CallOptions) {
+      // CLI tools don't truly stream, so we simulate with a single chunk.
       const result = await this.doGenerate(callOptions);
       const textContent = result.content.find(
         (c): c is { type: "text"; text: string } => c.type === "text"
       );
       const textId = "t0";
 
-      const stream = new ReadableStream<LanguageModelV2StreamPart>({
+      const stream = new ReadableStream<LanguageModelV3StreamPart>({
         start(
-          controller: ReadableStreamDefaultController<LanguageModelV2StreamPart>
+          controller: ReadableStreamDefaultController<LanguageModelV3StreamPart>
         ) {
           controller.enqueue({
             type: "stream-start",
@@ -235,6 +285,7 @@ export function cliModel(args: {
             type: "finish",
             finishReason: result.finishReason,
             usage: result.usage,
+            providerMetadata: result.providerMetadata,
           });
           controller.close();
         },
@@ -247,11 +298,6 @@ export function cliModel(args: {
 
 /**
  * Convenience factory for a Claude Code-backed AI SDK model.
- *
- * @param model - Claude model alias or identifier.
- * @param clientOptions - Optional Claude client configuration forwarded to
- * {@link import("./client.js").createClaudeCodeClient}.
- * @returns AI SDK model wrapper backed by Claude Code.
  */
 export function claudeCode(model: string, clientOptions?: ClaudeModelOptions) {
   return cliModel({ tool: "claude-code", model, clientOptions });
@@ -259,11 +305,6 @@ export function claudeCode(model: string, clientOptions?: ClaudeModelOptions) {
 
 /**
  * Convenience factory for a Codex-backed AI SDK model.
- *
- * @param model - Codex model identifier.
- * @param clientOptions - Optional Codex client configuration forwarded to
- * {@link import("./client.js").createCodexClient}.
- * @returns AI SDK model wrapper backed by Codex.
  */
 export function codex(model: string, clientOptions?: CodexModelOptions) {
   return cliModel({ tool: "codex", model, clientOptions });
@@ -271,11 +312,6 @@ export function codex(model: string, clientOptions?: CodexModelOptions) {
 
 /**
  * Convenience factory for a Gemini-backed AI SDK model.
- *
- * @param model - Gemini model identifier.
- * @param clientOptions - Optional Gemini client configuration forwarded to
- * {@link import("./client.js").createGeminiClient}.
- * @returns AI SDK model wrapper backed by Gemini.
  */
 export function gemini(model: string, clientOptions?: GeminiModelOptions) {
   return cliModel({ tool: "gemini", model, clientOptions });
