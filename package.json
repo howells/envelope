@@ -35,15 +35,19 @@
     "node": ">=20"
   },
   "scripts": {
-    "build": "tsc -p tsconfig.json",
-    "dev": "tsc -p tsconfig.json -w",
+    "build": "turbo run build",
+    "dev": "turbo run dev --filter=@howells/envelope-playground",
     "prepack": "pnpm build",
-    "test": "vitest run",
-    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "turbo run test",
+    "typecheck": "turbo run typecheck",
     "prepare": "husky",
     "format": "ultracite fix --unsafe",
-    "lint": "biome lint .",
-    "knip": "knip"
+    "lint": "turbo run lint",
+    "knip": "knip",
+    "dev:all": "turbo run dev --parallel",
+    "check": "pnpm typecheck && pnpm lint && pnpm test",
+    "check:affected": "turbo run build lint typecheck test --affected",
+    "clean": "turbo clean"
   },
   "keywords": [
     "llm",
@@ -69,9 +73,10 @@
     "typescript": "^6.0.2",
     "ultracite": "^7.4.3",
     "vitest": "^4.1.2",
-    "zod": "^4.3.6"
+    "zod": "^4.3.6",
+    "turbo": "2.9.3"
   },
-  "packageManager": "pnpm@10.12.4",
+  "packageManager": "pnpm@10.23.0",
   "lint-staged": {
     "*.{js,ts,jsx,tsx,json,jsonc,css}": "biome format --write --no-errors-on-unmatched"
   }
