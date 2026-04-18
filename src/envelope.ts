@@ -110,7 +110,7 @@ export function createEnvelope<
     const output = args.output.safeParse(res.structured);
     if (!output.success) {
       throw new EnvelopeError(
-        `Model returned invalid structured output:\n${output.error.message}`
+        `Model returned invalid structured output:\n${output.error.message}`,
       );
     }
     return output.data;

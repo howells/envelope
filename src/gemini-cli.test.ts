@@ -111,7 +111,7 @@ describe("buildGeminiArgs", () => {
         adminPolicy: ["./admin.md"],
         extensions: ["ext-a"],
         includeDirectories: ["../shared"],
-      })
+      }),
     );
 
     expect(args).toContain("--debug");
@@ -126,7 +126,7 @@ describe("buildGeminiArgs", () => {
 describe("geminiText", () => {
   it("extracts the response field from the Gemini JSON envelope", async () => {
     setNextChild(
-      createMockChild(JSON.stringify({ response: "hello world" }), 0)
+      createMockChild(JSON.stringify({ response: "hello world" }), 0),
     );
 
     const result = await geminiText({ prompt: "test" });
@@ -174,7 +174,7 @@ describe("geminiText", () => {
 describe("geminiStructured", () => {
   it("parses bare JSON returned by Gemini", async () => {
     setNextChild(
-      createMockChild(JSON.stringify({ response: '{"answer":42}' }), 0)
+      createMockChild(JSON.stringify({ response: '{"answer":42}' }), 0),
     );
 
     const result = await geminiStructured<{ answer: number }>({
@@ -190,8 +190,8 @@ describe("geminiStructured", () => {
     setNextChild(
       createMockChild(
         JSON.stringify({ response: '```json\n{"answer":42}\n```' }),
-        0
-      )
+        0,
+      ),
     );
 
     const result = await geminiStructured<{ answer: number }>({
@@ -209,7 +209,7 @@ describe("geminiStructured", () => {
       geminiStructured({
         prompt: "answer the question",
         jsonSchema: '{"type":"object"}',
-      })
+      }),
     ).rejects.toThrow("gemini output was not JSON");
   });
 });

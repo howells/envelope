@@ -1,10 +1,10 @@
-import { describe, it, expect, vi } from "vitest";
 import EventEmitter from "node:events";
+import { describe, expect, it, vi } from "vitest";
 import {
   buildBaseArgs,
-  defaultClaudeOptions,
   claudeCodeStructured,
   claudeCodeText,
+  defaultClaudeOptions,
 } from "./claude-code.js";
 
 interface MockStream extends EventEmitter {
@@ -69,7 +69,7 @@ describe("buildBaseArgs", () => {
     const args = buildBaseArgs(opts);
     expect(args).toContain("--append-system-prompt");
     expect(args[args.indexOf("--append-system-prompt") + 1]).toBe(
-      "Extra context."
+      "Extra context.",
     );
   });
 
@@ -258,7 +258,7 @@ describe("claudeCodeStructured", () => {
     setNextChild(createMockChild(JSON.stringify(envelope), 0));
 
     await expect(
-      claudeCodeStructured({ prompt: "test", jsonSchema: '{"type":"object"}' })
+      claudeCodeStructured({ prompt: "test", jsonSchema: '{"type":"object"}' }),
     ).rejects.toThrow("rate_limit");
   });
 
@@ -266,7 +266,7 @@ describe("claudeCodeStructured", () => {
     setNextChild(createMockChild("not json at all", 0));
 
     await expect(
-      claudeCodeStructured({ prompt: "test", jsonSchema: '{"type":"object"}' })
+      claudeCodeStructured({ prompt: "test", jsonSchema: '{"type":"object"}' }),
     ).rejects.toThrow("non-JSON output");
   });
 
@@ -333,12 +333,12 @@ describe("claudeCodeText", () => {
     setNextChild(
       createMockChild(
         JSON.stringify({ is_error: true, subtype: "rate_limit" }),
-        0
-      )
+        0,
+      ),
     );
 
     await expect(claudeCodeText({ prompt: "test" })).rejects.toThrow(
-      "rate_limit"
+      "rate_limit",
     );
   });
 });

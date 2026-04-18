@@ -91,7 +91,7 @@ export interface CliClient {
    * @typeParam T - Expected structured response shape.
    */
   structured<T>(
-    args: GenerateStructuredArgs
+    args: GenerateStructuredArgs,
   ): Promise<{ structured: T; meta?: CliResultMeta }>;
   /**
    * Executes a plain-text completion request.

@@ -149,7 +149,7 @@ describe("ai-sdk adapter", () => {
             content: [{ type: "image", image: "ignored" }],
           },
         ],
-      } as LanguageModelV3CallOptions)
+      } as LanguageModelV3CallOptions),
     ).rejects.toThrow("only supports text prompt parts");
   });
 

@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, expect, it } from "vitest";
 import { baseArgs, defaultOptions } from "./codex-cli.js";
 
 function collectFlagIndices(args: string[], flag: string) {

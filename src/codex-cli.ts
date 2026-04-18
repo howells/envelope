@@ -87,7 +87,7 @@ function spawnAsync(
     timeoutMs?: number;
     stdin?: string;
     maxBufferBytes?: number;
-  }
+  },
 ) {
   return new Promise<{ stdout: string; stderr: string }>((resolve, reject) => {
     const child = spawn(file, args, {
@@ -172,7 +172,7 @@ function spawnAsync(
       cleanup();
       if (code !== 0) {
         const e = new Error(
-          `codex CLI failed (code=${code ?? "?"}, signal=${signal ?? "?"}, timedOut=${timedOut}): ${stderr || stdout}`
+          `codex CLI failed (code=${code ?? "?"}, signal=${signal ?? "?"}, timedOut=${timedOut}): ${stderr || stdout}`,
         );
         const error = e as CodexCliError;
         error.code = code;
@@ -258,8 +258,8 @@ async function execInTempDir(
   options: Required<CodexOptions>,
   setup: (
     td: string,
-    outPath: string
-  ) => Promise<{ args: string[]; stdin?: string }>
+    outPath: string,
+  ) => Promise<{ args: string[]; stdin?: string }>,
 ): Promise<string> {
   const td = await mkdtemp(join(tmpdir(), "envelope-codex-"));
   try {
@@ -345,7 +345,7 @@ export async function codexStructured<TStructured>(args: {
     parsed = JSON.parse(raw);
   } catch {
     throw new Error(
-      `codex output was not JSON. First 200 chars:\n${raw.slice(0, 200)}`
+      `codex output was not JSON. First 200 chars:\n${raw.slice(0, 200)}`,
     );
   }
 

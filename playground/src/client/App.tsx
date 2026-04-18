@@ -13,7 +13,7 @@ const DEFAULT_SCHEMA = JSON.stringify(
     required: ["answer", "confidence"],
   },
   null,
-  2
+  2,
 );
 
 export function App() {

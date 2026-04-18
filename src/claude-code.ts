@@ -168,7 +168,7 @@ function assertClaudeArgSize(prompt: string, jsonSchema?: string) {
     promptBytes + schemaBytes > MAX_CLAUDE_COMBINED_ARG_BYTES
   ) {
     throw new Error(
-      "claude CLI prompt/schema exceeds the safe argv transport limit; reduce the payload size before calling this wrapper"
+      "claude CLI prompt/schema exceeds the safe argv transport limit; reduce the payload size before calling this wrapper",
     );
   }
 }
@@ -188,7 +188,7 @@ function spawnAsync(
     env?: NodeJS.ProcessEnv;
     timeoutMs?: number;
     maxBufferBytes?: number;
-  }
+  },
 ) {
   return new Promise<{ stdout: string; stderr: string }>((resolve, reject) => {
     const child = spawn(file, args, {
@@ -274,7 +274,7 @@ function spawnAsync(
         const e = new Error(
           `claude CLI failed (code=${code ?? "?"}, signal=${
             signal ?? "?"
-          }, killed=${killedByTimeout}): ${stderr || stdout}`
+          }, killed=${killedByTimeout}): ${stderr || stdout}`,
         );
         const error = e as ClaudeCliError;
         error.code = code;
@@ -295,7 +295,7 @@ function spawnAsync(
  * @returns A normalized options object where every field is defined.
  */
 export function defaultClaudeOptions(
-  opts?: ClaudeCodeOptions
+  opts?: ClaudeCodeOptions,
 ): Required<ClaudeCodeOptions> {
   return {
     claudePath: opts?.claudePath ?? "claude",
@@ -389,7 +389,7 @@ function isTimeoutKill(err: unknown) {
  */
 async function spawnWithRetry(
   options: Required<ClaudeCodeOptions>,
-  cliArgs: string[]
+  cliArgs: string[],
 ): Promise<string> {
   let stdout: string | null = null;
   let lastErr: unknown = null;
@@ -465,7 +465,7 @@ export async function claudeCodeStructured<TStructured>(args: {
     envelopeUnknown = JSON.parse(stdout) as unknown;
   } catch {
     throw new Error(
-      `claude CLI returned non-JSON output. First 200 chars:\n${stdout.slice(0, 200)}`
+      `claude CLI returned non-JSON output. First 200 chars:\n${stdout.slice(0, 200)}`,
     );
   }
 
@@ -476,7 +476,7 @@ export async function claudeCodeStructured<TStructured>(args: {
   const envelope = envelopeUnknown as ClaudeCodeEnvelope<TStructured>;
   if (envelope.is_error) {
     throw new Error(
-      `claude CLI error envelope: ${envelope.subtype ?? "unknown"}`
+      `claude CLI error envelope: ${envelope.subtype ?? "unknown"}`,
     );
   }
 
@@ -532,7 +532,7 @@ export async function claudeCodeText(args: {
   const envelope = envelopeUnknown as ClaudeCodeEnvelope<unknown>;
   if (envelope.is_error) {
     throw new Error(
-      `claude CLI error envelope: ${envelope.subtype ?? "unknown"}`
+      `claude CLI error envelope: ${envelope.subtype ?? "unknown"}`,
     );
   }
   return {

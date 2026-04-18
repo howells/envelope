@@ -132,7 +132,7 @@ function assertGeminiArgSize(prompt: string, jsonSchema?: string) {
     promptBytes + schemaBytes > MAX_GEMINI_COMBINED_ARG_BYTES
   ) {
     throw new Error(
-      "gemini CLI prompt/schema exceeds the safe argv transport limit; reduce the payload size before calling this wrapper"
+      "gemini CLI prompt/schema exceeds the safe argv transport limit; reduce the payload size before calling this wrapper",
     );
   }
 }
@@ -191,7 +191,7 @@ function spawnAsync(
     env?: NodeJS.ProcessEnv;
     timeoutMs?: number;
     maxBufferBytes?: number;
-  }
+  },
 ) {
   return new Promise<{ stdout: string; stderr: string }>((resolve, reject) => {
     const child = spawn(file, args, {
@@ -276,7 +276,7 @@ function spawnAsync(
       cleanup();
       if (code !== 0) {
         const error = new Error(
-          `gemini CLI failed (code=${code ?? "?"}, signal=${signal ?? "?"}, timedOut=${timedOut}): ${stderr || stdout}`
+          `gemini CLI failed (code=${code ?? "?"}, signal=${signal ?? "?"}, timedOut=${timedOut}): ${stderr || stdout}`,
         );
         const cliError = error as GeminiCliError;
         cliError.code = code;
@@ -297,7 +297,7 @@ function spawnAsync(
  * @returns A normalized options object where every field is defined.
  */
 export function defaultGeminiOptions(
-  opts?: GeminiOptions
+  opts?: GeminiOptions,
 ): Required<GeminiOptions> {
   return {
     geminiPath: opts?.geminiPath ?? "gemini",
@@ -382,7 +382,7 @@ export async function geminiText(args: {
       cwd: options.cwd,
       env: options.env,
       timeoutMs: options.timeoutMs,
-    }
+    },
   );
 
   try {
@@ -439,7 +439,7 @@ export async function geminiStructured<TStructured>(args: {
     parsed = JSON.parse(stripMarkdownFence(raw));
   } catch {
     throw new Error(
-      `gemini output was not JSON. First 200 chars:\n${raw.slice(0, 200)}`
+      `gemini output was not JSON. First 200 chars:\n${raw.slice(0, 200)}`,
     );
   }
 

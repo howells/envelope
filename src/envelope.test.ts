@@ -1,7 +1,7 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { z } from "zod";
-import { createEnvelope, EnvelopeError } from "./envelope.js";
 import type { CliClient } from "./client.js";
+import { createEnvelope, EnvelopeError } from "./envelope.js";
 
 function mockClient(response: unknown): CliClient {
   return {
@@ -30,7 +30,7 @@ describe("createEnvelope", () => {
 
     // Verify prompt function received parsed data
     expect(client.structured).toHaveBeenCalledWith(
-      expect.objectContaining({ prompt: "Summarize: Hello world" })
+      expect.objectContaining({ prompt: "Summarize: Hello world" }),
     );
   });
 
@@ -70,7 +70,7 @@ describe("createEnvelope", () => {
     });
 
     await expect(envelope({ text: "valid input" })).rejects.toThrow(
-      "Model returned invalid structured output"
+      "Model returned invalid structured output",
     );
   });
 
@@ -84,7 +84,7 @@ describe("createEnvelope", () => {
     });
 
     await expect(envelope({ text: "valid input" })).rejects.toThrow(
-      EnvelopeError
+      EnvelopeError,
     );
   });
 

@@ -1,7 +1,7 @@
-import express from "express";
-import { generateText, Output, jsonSchema } from "ai";
 import type { JSONSchema7 } from "@ai-sdk/provider";
 import { claudeCode, codex, gemini } from "@howells/envelope/ai-sdk";
+import { generateText, jsonSchema, Output } from "ai";
+import express from "express";
 
 const app = express();
 app.use(express.json());
@@ -27,7 +27,7 @@ function makeModel(cli: string | undefined) {
 function sendCliError(
   res: express.Response,
   cli: string | undefined,
-  err: unknown
+  err: unknown,
 ) {
   const message = err instanceof Error ? err.message : String(err);
   console.error(`[envelope] ${cli} error:`, message);
