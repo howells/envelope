@@ -140,6 +140,90 @@ describe("geminiText", () => {
     expect(result.text).toBe("plain text response");
   });
 
+  // gemini-cli 0.53.0 reports failures in-band as `{ session_id, error: {…} }`.
+  // A non-zero exit is rejected earlier in spawnAsync, so this covers the CLI
+  // exiting 0 while reporting the problem in the envelope.
+  it("surfaces the CLI's own message from an error envelope", async () => {
+    setNextChild(
+      createMockChild(
+        JSON.stringify({
+          error: {
+            code: 41,
+            message: "Please set an Auth method",
+            type: "Error",
+          },
+          session_id: "abc",
+        }),
+        0,
+      ),
+    );
+
+    await expect(geminiText({ prompt: "test" })).rejects.toThrow(
+      "Please set an Auth method (code 41)",
+    );
+  });
+
+  it("throws rather than returning the envelope JSON when `response` is missing", async () => {
+    setNextChild(
+      createMockChild(JSON.stringify({ session_id: "abc", stats: {} }), 0),
+    );
+
+    await expect(geminiText({ prompt: "test" })).rejects.toThrow(
+      "no `response` string",
+    );
+  });
+
+  it("names the envelope's keys when `response` is missing", async () => {
+    setNextChild(
+      createMockChild(JSON.stringify({ session_id: "abc", stats: {} }), 0),
+    );
+
+    await expect(geminiText({ prompt: "test" })).rejects.toThrow(
+      /keys: session_id, stats/,
+    );
+  });
+
+  it("throws when `response` is present but not a string", async () => {
+    setNextChild(createMockChild(JSON.stringify({ response: { text: 1 } }), 0));
+
+    await expect(geminiText({ prompt: "test" })).rejects.toThrow(
+      "no `response` string",
+    );
+  });
+
+  it("returns an empty string when `response` is an explicit empty string", async () => {
+    setNextChild(createMockChild(JSON.stringify({ response: "" }), 0));
+
+    const result = await geminiText({ prompt: "test" });
+    expect(result.text).toBe("");
+  });
+
+  // An array passes the old `typeof x === "object" && x !== null` guard, which is
+  // how the equivalent Claude Code regression went unnoticed. The Gemini CLI's
+  // array shape is unverified, so this must fail loudly rather than be handled.
+  it("throws on a JSON array payload instead of treating it as an envelope", async () => {
+    setNextChild(
+      createMockChild(
+        JSON.stringify([
+          { type: "system" },
+          { type: "result", response: "hi" },
+        ]),
+        0,
+      ),
+    );
+
+    await expect(geminiText({ prompt: "test" })).rejects.toThrow(
+      "returned a JSON array of 2 element(s)",
+    );
+  });
+
+  it("still falls back to raw stdout for a JSON scalar", async () => {
+    setNextChild(createMockChild("42", 0));
+
+    const result = await geminiText({ prompt: "test" });
+    expect(result.text).toBe("42");
+  });
+
   it("passes expected flags to spawn", async () => {
     const { spawn } = await import("node:child_process");
     const mockedSpawn = vi.mocked(spawn);
@@ -211,5 +295,30 @@ describe("geminiStructured", () => {
         jsonSchema: '{"type":"object"}',
       }),
     ).rejects.toThrow("gemini output was not JSON");
+  });
+
+  // `JSON.parse("null")` succeeds, so the cast would otherwise return a `null`
+  // typed as TStructured and the failure would surface at the caller's first
+  // property access, far from Gemini.
+  it("throws rather than casting a JSON `null` to the structured type", async () => {
+    setNextChild(createMockChild(JSON.stringify({ response: "null" }), 0));
+
+    await expect(
+      geminiStructured({
+        prompt: "answer the question",
+        jsonSchema: '{"type":"object"}',
+      }),
+    ).rejects.toThrow("returned JSON `null`");
+  });
+
+  it("still accepts a structured array result", async () => {
+    setNextChild(createMockChild(JSON.stringify({ response: "[1,2,3]" }), 0));
+
+    const result = await geminiStructured<number[]>({
+      prompt: "answer the question",
+      jsonSchema: '{"type":"array"}',
+    });
+
+    expect(result.structured).toEqual([1, 2, 3]);
   });
 });

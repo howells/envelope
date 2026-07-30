@@ -87,6 +87,12 @@ export interface GeminiEnvelope {
   session_id?: string;
   response?: string;
   stats?: unknown;
+  /**
+   * Present instead of `response` when the CLI reports a failure, e.g.
+   * `{ type: "Error", message: "Please set an Auth method…", code: 41 }`.
+   * Verified against gemini-cli 0.53.0.
+   */
+  error?: { type?: string; message?: string; code?: number };
 }
 
 interface GeminiCliError extends Error {
@@ -110,10 +116,17 @@ const MAX_GEMINI_COMBINED_ARG_BYTES = 256 * 1024;
 const FENCED_JSON_PATTERN = /^```(?:json)?\s*([\s\S]*?)\s*```$/i;
 
 /**
- * Checks whether a value is a non-null object.
+ * Checks whether a value is a non-null, non-array object.
+ *
+ * The array exclusion is load-bearing. `typeof [] === "object"`, so a bare
+ * non-null check lets a JSON array pass as an envelope; reading a named field
+ * off it then yields `undefined`, and any fallback downstream turns that into a
+ * success-shaped empty or raw-stdout result. That is precisely how a Claude Code
+ * output-format change went unnoticed in `claude-code.ts` — see
+ * `selectResultEnvelope` there.
  */
 function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 /**
@@ -385,15 +398,55 @@ export async function geminiText(args: {
     },
   );
 
+  let parsed: unknown;
   try {
-    const parsed = JSON.parse(stdout);
-    if (isRecord(parsed) && typeof parsed.response === "string") {
-      return { text: parsed.response, envelope: parsed as GeminiEnvelope };
-    }
+    parsed = JSON.parse(stdout);
   } catch {
-    // Fall back to raw stdout if Gemini does not emit the expected JSON envelope.
+    // Not JSON at all, so the CLI was configured for plain-text output. This is
+    // the one fallback that is genuinely safe: the caller asked for text and
+    // text is what arrived.
+    return { text: stdout };
   }
 
+  if (isRecord(parsed)) {
+    // The CLI reports failures in-band as `{ session_id, error: { … } }` with no
+    // `response`. A non-zero exit is already rejected in `spawnAsync`, so this
+    // catches the case where it exits 0 and reports the problem in the envelope.
+    // Verified against gemini-cli 0.53.0.
+    if (isRecord(parsed.error)) {
+      const { message, code } = parsed.error as GeminiEnvelope["error"] &
+        object;
+      throw new Error(
+        `gemini CLI error envelope: ${message ?? "unknown error"}${code === undefined ? "" : ` (code ${code})`}`,
+      );
+    }
+
+    // An envelope object, so it must carry the reply. Falling back to raw stdout
+    // here would hand the caller the envelope's own JSON as though it were the
+    // model's answer — a wrong result dressed as a right one, which is harder to
+    // notice than an outright failure.
+    if (typeof parsed.response !== "string") {
+      const keys = Object.keys(parsed);
+      throw new Error(
+        `gemini CLI returned a JSON envelope with no \`response\` string (keys: ${keys.join(", ") || "none"})`,
+      );
+    }
+
+    return { text: parsed.response, envelope: parsed as GeminiEnvelope };
+  }
+
+  if (Array.isArray(parsed)) {
+    // Claude Code moved from a single envelope to an array of stream events and
+    // silently broke every consumer. Gemini may or may not do the same; the CLI
+    // was not installed when this was written, so the shape is unverified and
+    // deliberately unhandled. Fail loudly instead of guessing — and if this ever
+    // fires, model the fix on `selectResultEnvelope` in `claude-code.ts`.
+    throw new Error(
+      `gemini CLI returned a JSON array of ${parsed.length} element(s), not an envelope object; array payloads are unsupported because the CLI's array shape has not been verified`,
+    );
+  }
+
+  // A JSON scalar: plain-text output that happens to parse. Return it verbatim.
   return { text: stdout };
 }
 
@@ -440,6 +493,16 @@ export async function geminiStructured<TStructured>(args: {
   } catch {
     throw new Error(
       `gemini output was not JSON. First 200 chars:\n${raw.slice(0, 200)}`,
+    );
+  }
+
+  // `JSON.parse("null")` succeeds, so without this the cast hands back a `null`
+  // wearing `TStructured`'s type and the failure surfaces later, at the caller's
+  // first property access, with nothing left to point at Gemini. Scalars are
+  // left alone — a schema may legitimately describe one.
+  if (parsed === null) {
+    throw new Error(
+      "gemini returned JSON `null` rather than a structured result",
     );
   }
 
