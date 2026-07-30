@@ -5,6 +5,7 @@ import {
   claudeCodeStructured,
   claudeCodeText,
   defaultClaudeOptions,
+  selectResultEnvelope,
 } from "./claude-code.js";
 
 interface MockStream extends EventEmitter {
@@ -230,6 +231,39 @@ function setNextChild(child: EventEmitter) {
   nextChild = child as MockChild;
 }
 
+/**
+ * Builds the stream-event array Claude Code 2.1.x emits for `--output-format json`:
+ * `system`, `assistant`, `rate_limit_event`, then the terminal `result` event.
+ */
+function createStreamEvents(
+  terminal: Record<string, unknown>,
+  assistantText = "PONG",
+) {
+  return [
+    {
+      type: "system",
+      subtype: "init",
+      session_id: "sess_1",
+      model: "claude-opus-4",
+      cwd: "/tmp",
+    },
+    {
+      type: "assistant",
+      session_id: "sess_1",
+      message: {
+        role: "assistant",
+        content: [{ type: "text", text: assistantText }],
+      },
+    },
+    {
+      type: "rate_limit_event",
+      session_id: "sess_1",
+      rate_limit: { status: "allowed", resets_at: 1_800_000_000 },
+    },
+    terminal,
+  ];
+}
+
 // ---------------------------------------------------------------------------
 // claudeCodeStructured (mocked spawn)
 // ---------------------------------------------------------------------------
@@ -268,6 +302,41 @@ describe("claudeCodeStructured", () => {
     await expect(
       claudeCodeStructured({ prompt: "test", jsonSchema: '{"type":"object"}' }),
     ).rejects.toThrow("non-JSON output");
+  });
+
+  it("reads structured_output off the terminal result event of an array payload", async () => {
+    const events = createStreamEvents({
+      type: "result",
+      subtype: "success",
+      is_error: false,
+      session_id: "sess_1",
+      result: "done",
+      structured_output: { answer: 42 },
+      total_cost_usd: 0.01,
+    });
+    setNextChild(createMockChild(JSON.stringify(events), 0));
+
+    const res = await claudeCodeStructured<{ answer: number }>({
+      prompt: "test",
+      jsonSchema: '{"type":"object"}',
+    });
+
+    expect(res.structured_output).toEqual({ answer: 42 });
+    expect(res.total_cost_usd).toBe(0.01);
+  });
+
+  it("throws when the terminal result event of an array payload is an error", async () => {
+    const events = createStreamEvents({
+      type: "result",
+      subtype: "rate_limit",
+      is_error: true,
+      session_id: "sess_1",
+    });
+    setNextChild(createMockChild(JSON.stringify(events), 0));
+
+    await expect(
+      claudeCodeStructured({ prompt: "test", jsonSchema: '{"type":"object"}' }),
+    ).rejects.toThrow("rate_limit");
   });
 
   it("passes all args to spawn", async () => {
@@ -340,6 +409,126 @@ describe("claudeCodeText", () => {
     await expect(claudeCodeText({ prompt: "test" })).rejects.toThrow(
       "rate_limit",
     );
+  });
+
+  it("extracts the reply from the array of stream events emitted by CLI 2.1.x", async () => {
+    const events = createStreamEvents({
+      type: "result",
+      subtype: "success",
+      is_error: false,
+      session_id: "sess_1",
+      result: "PONG",
+      stop_reason: null,
+      total_cost_usd: 0.02,
+    });
+    expect(events.map((event) => event.type)).toEqual([
+      "system",
+      "assistant",
+      "rate_limit_event",
+      "result",
+    ]);
+    setNextChild(createMockChild(JSON.stringify(events), 0));
+
+    const res = await claudeCodeText({ prompt: "ping" });
+    expect(res.text).toBe("PONG");
+    expect(res.total_cost_usd).toBe(0.02);
+    expect(res.session_id).toBe("sess_1");
+  });
+
+  it("extracts the reply from the legacy single-object envelope", async () => {
+    const envelope = {
+      type: "result",
+      subtype: "success",
+      is_error: false,
+      session_id: "sess_legacy",
+      result: "PONG",
+      stop_reason: null,
+      total_cost_usd: 0.02,
+    };
+    setNextChild(createMockChild(JSON.stringify(envelope), 0));
+
+    const res = await claudeCodeText({ prompt: "ping" });
+    expect(res.text).toBe("PONG");
+    expect(res.total_cost_usd).toBe(0.02);
+    expect(res.session_id).toBe("sess_legacy");
+  });
+
+  it("throws rather than returning empty text when the envelope has no result field", async () => {
+    const events = createStreamEvents({
+      type: "result",
+      subtype: "success",
+      is_error: false,
+      session_id: "sess_1",
+    });
+    setNextChild(createMockChild(JSON.stringify(events), 0));
+
+    await expect(claudeCodeText({ prompt: "ping" })).rejects.toThrow(
+      /no `result` field/,
+    );
+  });
+
+  it("returns an empty string when result is an explicit empty string", async () => {
+    setNextChild(
+      createMockChild(
+        JSON.stringify({ type: "result", subtype: "success", result: "" }),
+        0,
+      ),
+    );
+
+    const res = await claudeCodeText({ prompt: "test" });
+    expect(res.text).toBe("");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// selectResultEnvelope
+// ---------------------------------------------------------------------------
+
+describe("selectResultEnvelope", () => {
+  it("returns a record payload unchanged", () => {
+    const envelope = { type: "result", result: "hello" };
+    expect(selectResultEnvelope(envelope)).toBe(envelope);
+  });
+
+  it("returns the terminal result event from an array payload", () => {
+    const events = createStreamEvents({
+      type: "result",
+      subtype: "success",
+      result: "PONG",
+    });
+    expect(selectResultEnvelope(events)).toBe(events.at(-1));
+  });
+
+  it("returns the last result event when several are present", () => {
+    const events = [
+      { type: "result", result: "first" },
+      { type: "assistant" },
+      { type: "result", result: "last" },
+    ];
+    expect(selectResultEnvelope(events)).toEqual({
+      type: "result",
+      result: "last",
+    });
+  });
+
+  it("falls back to the last record when no result event is present", () => {
+    const events = [
+      { type: "system", subtype: "init" },
+      { type: "assistant", message: { role: "assistant" } },
+    ];
+    expect(selectResultEnvelope(events)).toBe(events.at(-1));
+  });
+
+  it("returns undefined for an empty array", () => {
+    expect(selectResultEnvelope([])).toBeUndefined();
+  });
+
+  it("returns undefined for non-object input", () => {
+    expect(selectResultEnvelope("just a string")).toBeUndefined();
+    expect(selectResultEnvelope(42)).toBeUndefined();
+    expect(selectResultEnvelope(null)).toBeUndefined();
+    expect(selectResultEnvelope(undefined)).toBeUndefined();
+    expect(selectResultEnvelope(["a", "b"])).toBeUndefined();
   });
 });
 

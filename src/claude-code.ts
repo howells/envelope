@@ -146,10 +146,49 @@ const MAX_CLAUDE_ARG_BYTES = 128 * 1024;
 const MAX_CLAUDE_COMBINED_ARG_BYTES = 256 * 1024;
 
 /**
- * Checks whether a value is a non-null object.
+ * Checks whether a value is a non-null, non-array object.
  */
 function isRecord(v: unknown): v is Record<string, unknown> {
-  return typeof v === "object" && v !== null;
+  return typeof v === "object" && v !== null && !Array.isArray(v);
+}
+
+/**
+ * Reduce Claude Code's stdout payload to the single envelope carrying the reply.
+ *
+ * The CLI emits either one envelope object or — since 2.1.x — an array of stream
+ * events (`system`, `assistant`, `rate_limit_event`, `result`) with the reply on
+ * the terminal `result` event. Both shapes are accepted so the wrapper keeps
+ * working across CLI versions.
+ *
+ * @param payload - Parsed JSON value read from the CLI's stdout.
+ * @returns The envelope carrying the reply, or `undefined` when the payload holds none.
+ */
+export function selectResultEnvelope(
+  payload: unknown,
+): Record<string, unknown> | undefined {
+  if (isRecord(payload)) {
+    return payload;
+  }
+  if (!Array.isArray(payload)) {
+    return undefined;
+  }
+
+  let lastRecord: Record<string, unknown> | undefined;
+  for (const event of payload) {
+    if (!isRecord(event)) {
+      continue;
+    }
+    lastRecord = event;
+  }
+
+  for (let i = payload.length - 1; i >= 0; i--) {
+    const event = payload[i];
+    if (isRecord(event) && event.type === "result") {
+      return event;
+    }
+  }
+
+  return lastRecord;
 }
 
 /**
@@ -427,6 +466,8 @@ async function spawnWithRetry(
  *
  * The function validates argv transport size, spawns Claude Code, parses the returned JSON
  * envelope, and throws when Claude signals an error envelope or emits malformed JSON.
+ * Both CLI output shapes are accepted: a single envelope object, or an array of stream
+ * events whose terminal `result` event carries the reply.
  *
  * @typeParam TStructured - Expected type of the parsed `structured_output` field.
  * @param args - Structured request configuration.
@@ -469,11 +510,14 @@ export async function claudeCodeStructured<TStructured>(args: {
     );
   }
 
-  if (!isRecord(envelopeUnknown)) {
-    throw new Error("claude CLI returned non-object JSON envelope");
+  const selected = selectResultEnvelope(envelopeUnknown);
+  if (!selected) {
+    throw new Error(
+      "claude CLI returned non-object JSON envelope: found neither an envelope object nor a terminal `result` event",
+    );
   }
 
-  const envelope = envelopeUnknown as ClaudeCodeEnvelope<TStructured>;
+  const envelope = selected as ClaudeCodeEnvelope<TStructured>;
   if (envelope.is_error) {
     throw new Error(
       `claude CLI error envelope: ${envelope.subtype ?? "unknown"}`,
@@ -487,8 +531,10 @@ export async function claudeCodeStructured<TStructured>(args: {
  * Requests plain-text output from Claude Code.
  *
  * The wrapper prefers Claude's JSON envelope mode so it can detect structured CLI errors.
- * If the response cannot be parsed as a JSON envelope, the raw stdout is returned as a
- * fallback so callers can still work with plain-text CLI output.
+ * Both CLI output shapes are accepted: a single envelope object, or an array of stream
+ * events whose terminal `result` event carries the reply. If the response cannot be parsed
+ * as a JSON envelope, the raw stdout is returned as a fallback so callers can still work
+ * with plain-text CLI output.
  *
  * @param args - Text request configuration.
  * @param args.prompt - Prompt text to send to Claude Code.
@@ -496,8 +542,11 @@ export async function claudeCodeStructured<TStructured>(args: {
  * @returns An object containing the extracted text response.
  *
  * @throws {Error}
- * Thrown when the prompt is too large for argv transport, the subprocess fails, or the
- * parsed JSON envelope reports `is_error: true`.
+ * Thrown when the prompt is too large for argv transport, the subprocess fails, the parsed
+ * JSON envelope reports `is_error: true`, or the envelope carries no `result` field at all.
+ * A missing `result` is treated as an error rather than an empty reply so that a breaking
+ * CLI output change cannot degrade silently into empty text; an explicit empty string is
+ * still returned as `""`.
  */
 export async function claudeCodeText(args: {
   prompt: string;
@@ -525,18 +574,26 @@ export async function claudeCodeText(args: {
     return { text: stdout };
   }
 
-  if (!isRecord(envelopeUnknown)) {
+  const selected = selectResultEnvelope(envelopeUnknown);
+  if (!selected) {
     return { text: stdout };
   }
 
-  const envelope = envelopeUnknown as ClaudeCodeEnvelope<unknown>;
+  const envelope = selected as ClaudeCodeEnvelope<unknown>;
   if (envelope.is_error) {
     throw new Error(
       `claude CLI error envelope: ${envelope.subtype ?? "unknown"}`,
     );
   }
+  if (envelope.result === undefined) {
+    throw new Error(
+      `claude CLI returned an envelope with no \`result\` field (type=${
+        envelope.type ?? "?"
+      }, subtype=${envelope.subtype ?? "?"})`,
+    );
+  }
   return {
-    text: envelope.result ?? "",
+    text: envelope.result,
     total_cost_usd: envelope.total_cost_usd,
     session_id: envelope.session_id,
     stop_reason: envelope.stop_reason,
