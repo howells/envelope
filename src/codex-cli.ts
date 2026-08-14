@@ -26,6 +26,10 @@ export interface CodexOptions {
    * Environment variables passed to the child process.
    */
   env?: NodeJS.ProcessEnv;
+  /** Run without persisting session rollout files. */
+  ephemeral?: boolean;
+  /** Model reasoning effort forwarded through Codex configuration. */
+  effort?: "low" | "medium" | "high" | "xhigh";
   /**
    * Codex model identifier to pass to `--model`.
    */
@@ -66,6 +70,7 @@ export interface CodexOptions {
 }
 
 interface CodexCliError extends Error {
+  aborted?: boolean;
   code?: number | string | null;
   signal?: NodeJS.Signals | null;
   timedOut?: boolean;
@@ -84,9 +89,10 @@ function spawnAsync(
   opts: {
     cwd?: string;
     env?: NodeJS.ProcessEnv;
-    timeoutMs?: number;
-    stdin?: string;
     maxBufferBytes?: number;
+    signal?: AbortSignal;
+    stdin?: string;
+    timeoutMs?: number;
   },
 ) {
   return new Promise<{ stdout: string; stderr: string }>((resolve, reject) => {
@@ -99,9 +105,19 @@ function spawnAsync(
     const maxBufferBytes = opts.maxBufferBytes ?? 128 * 1024 * 1024;
     let stdout = "";
     let stderr = "";
+    let aborted = false;
     let timedOut = false;
     let timeout: NodeJS.Timeout | null = null;
     let hardKill: NodeJS.Timeout | null = null;
+
+    const abort = () => {
+      aborted = true;
+      try {
+        child.kill("SIGTERM");
+      } catch {
+        // The close/error handler owns settlement.
+      }
+    };
 
     const cleanup = () => {
       if (timeout) {
@@ -112,6 +128,7 @@ function spawnAsync(
         clearTimeout(hardKill);
         hardKill = null;
       }
+      opts.signal?.removeEventListener("abort", abort);
     };
 
     const maybeKillOnBuffer = () => {
@@ -160,6 +177,12 @@ function spawnAsync(
       }, opts.timeoutMs);
     }
 
+    if (opts.signal?.aborted) {
+      abort();
+    } else {
+      opts.signal?.addEventListener("abort", abort, { once: true });
+    }
+
     child.on("error", (err) => {
       cleanup();
       const e = new Error(`codex CLI spawn error: ${String(err)}`);
@@ -170,6 +193,15 @@ function spawnAsync(
 
     child.on("close", (code, signal) => {
       cleanup();
+      if (aborted) {
+        const error = new Error(
+          "codex CLI invocation aborted",
+        ) as CodexCliError;
+        error.aborted = true;
+        error.signal = signal;
+        reject(error);
+        return;
+      }
       if (code !== 0) {
         const e = new Error(
           `codex CLI failed (code=${code ?? "?"}, signal=${signal ?? "?"}, timedOut=${timedOut}): ${stderr || stdout}`,
@@ -198,6 +230,9 @@ function spawnAsync(
  */
 export function baseArgs(options: Required<CodexOptions>) {
   const args: string[] = ["exec"];
+  if (options.ephemeral) {
+    args.push("--ephemeral");
+  }
   if (options.skipGitRepoCheck) {
     args.push("--skip-git-repo-check");
   }
@@ -216,6 +251,10 @@ export function baseArgs(options: Required<CodexOptions>) {
   for (const c of options.config) {
     args.push("--config", c);
   }
+  args.push(
+    "--config",
+    `model_reasoning_effort=${JSON.stringify(options.effort)}`,
+  );
   if (options.jsonlEvents) {
     args.push("--json");
   }
@@ -236,6 +275,8 @@ export function defaultOptions(opts?: CodexOptions): Required<CodexOptions> {
     codexPath: opts?.codexPath ?? "codex",
     cwd: opts?.cwd ?? process.cwd(),
     env: opts?.env ?? process.env,
+    ephemeral: opts?.ephemeral ?? false,
+    effort: opts?.effort ?? "high",
     model: opts?.model ?? "gpt-5.3-codex",
     timeoutMs: opts?.timeoutMs ?? 180_000,
     skipGitRepoCheck: opts?.skipGitRepoCheck ?? true,
@@ -260,6 +301,7 @@ async function execInTempDir(
     td: string,
     outPath: string,
   ) => Promise<{ args: string[]; stdin?: string }>,
+  signal?: AbortSignal,
 ): Promise<string> {
   const td = await mkdtemp(join(tmpdir(), "envelope-codex-"));
   try {
@@ -276,6 +318,7 @@ async function execInTempDir(
     await spawnAsync(options.codexPath, cliArgs, {
       cwd: options.cwd,
       env: options.env,
+      signal,
       timeoutMs: options.timeoutMs,
       stdin: setupResult.stdin,
     });
@@ -300,12 +343,17 @@ async function execInTempDir(
 export async function codexText(args: {
   prompt: string;
   options?: CodexOptions;
+  signal?: AbortSignal;
 }) {
   const options = defaultOptions(args.options);
-  const text = await execInTempDir(options, async () => ({
-    args: ["-"],
-    stdin: args.prompt,
-  }));
+  const text = await execInTempDir(
+    options,
+    async () => ({
+      args: ["-"],
+      stdin: args.prompt,
+    }),
+    args.signal,
+  );
   return { text };
 }
 
@@ -328,17 +376,22 @@ export async function codexStructured<TStructured>(args: {
   prompt: string;
   jsonSchema: string;
   options?: CodexOptions;
+  signal?: AbortSignal;
 }) {
   const options = defaultOptions(args.options);
 
-  const raw = await execInTempDir(options, async (td) => {
-    const schemaPath = join(td, "schema.json");
-    await writeFile(schemaPath, args.jsonSchema, "utf8");
-    return {
-      args: ["--output-schema", schemaPath, "-"],
-      stdin: args.prompt,
-    };
-  });
+  const raw = await execInTempDir(
+    options,
+    async (td) => {
+      const schemaPath = join(td, "schema.json");
+      await writeFile(schemaPath, args.jsonSchema, "utf8");
+      return {
+        args: ["--output-schema", schemaPath, "-"],
+        stdin: args.prompt,
+      };
+    },
+    args.signal,
+  );
 
   let parsed: unknown;
   try {

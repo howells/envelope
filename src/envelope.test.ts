@@ -1,7 +1,12 @@
 import { describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 import type { CliClient } from "./client.js";
-import { createEnvelope, EnvelopeError } from "./envelope.js";
+import {
+  createEnvelope,
+  createReceiptedEnvelope,
+  EnvelopeError,
+  EnvelopeInvocationError,
+} from "./envelope.js";
 
 function mockClient(response: unknown): CliClient {
   return {
@@ -105,5 +110,93 @@ describe("createEnvelope", () => {
     }
     expect(call.jsonSchema).toBeDefined();
     expect(call.jsonSchema.type).toBe("object");
+  });
+});
+
+describe("createReceiptedEnvelope", () => {
+  const input = z.object({ text: z.string().min(1) });
+  const output = z.object({ summary: z.string().min(1) });
+
+  it("returns validated output with a redacted invocation receipt", async () => {
+    const client = mockClient({ summary: "A short summary." });
+    client.profileId = "claude-tool-free-ephemeral-v1";
+    client.structured = vi.fn().mockResolvedValue({
+      structured: { summary: "A short summary." },
+      meta: {
+        attemptCount: 2,
+        cliVersion: "2.1.0",
+        costUsd: 0.01,
+        resolvedModel: "claude-opus-4-1",
+      },
+    });
+    const envelope = createReceiptedEnvelope({
+      input,
+      output,
+      prompt: ({ text }) => `Summarize: ${text}`,
+      client,
+    });
+
+    const result = await envelope({ text: "Hello world" });
+    expect(result.output).toEqual({ summary: "A short summary." });
+    expect(result.receipt).toMatchObject({
+      attemptCount: 2,
+      cliVersion: "2.1.0",
+      profileId: "claude-tool-free-ephemeral-v1",
+      requestedModel: "opus",
+      resolvedModel: "claude-opus-4-1",
+      tool: "claude-code",
+    });
+    expect(result.receipt.inputDigest).toMatch(/^sha256:/);
+    expect(result.receipt.outputDigest).toMatch(/^sha256:/);
+    expect(JSON.stringify(result.receipt)).not.toContain("Hello world");
+    expect(JSON.stringify(result.receipt)).not.toContain("A short summary");
+  });
+
+  it("throws a receipted validation error without spawning a client", async () => {
+    const client = mockClient({ summary: "unused" });
+    const envelope = createReceiptedEnvelope({
+      input,
+      output,
+      prompt: ({ text }) => text,
+      client,
+    });
+
+    const promise = envelope({ text: "" });
+    await expect(promise).rejects.toBeInstanceOf(EnvelopeInvocationError);
+    await promise.catch((error: unknown) => {
+      expect((error as EnvelopeInvocationError).receipt.error?.kind).toBe(
+        "input_validation",
+      );
+    });
+    expect(client.structured).not.toHaveBeenCalled();
+  });
+
+  it("does not retain provider stderr or prompt content in failed receipts", async () => {
+    const client = mockClient({ summary: "unused" });
+    client.structured = vi
+      .fn()
+      .mockRejectedValue(
+        new Error("claude CLI failed: secret evidence from subprocess stderr"),
+      );
+    const envelope = createReceiptedEnvelope({
+      input,
+      output,
+      prompt: ({ text }) => `Analyze ${text}`,
+      client,
+    });
+
+    await envelope({ text: "confidential prompt body" }).catch(
+      (error: unknown) => {
+        const serialized = JSON.stringify(
+          (error as EnvelopeInvocationError).receipt,
+        );
+        expect(serialized).not.toContain("secret evidence");
+        expect(serialized).not.toContain("confidential prompt body");
+        expect((error as EnvelopeInvocationError).receipt.error).toEqual({
+          kind: "provider",
+          message: "Provider invocation failed",
+        });
+      },
+    );
   });
 });

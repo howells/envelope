@@ -28,6 +28,8 @@ describe("defaultOptions", () => {
     expect(opts.codexPath).toBe("codex");
     expect(opts.model).toBe("gpt-5.3-codex");
     expect(opts.timeoutMs).toBe(180_000);
+    expect(opts.effort).toBe("high");
+    expect(opts.ephemeral).toBe(false);
     expect(opts.skipGitRepoCheck).toBe(true);
     expect(opts.sandbox).toBe("workspace-write");
     expect(opts.profile).toBe("");
@@ -82,9 +84,14 @@ describe("baseArgs", () => {
     const opts = defaultOptions({ config: ["key1=val1", "key2=val2"] });
     const args = baseArgs(opts);
     const indices = collectFlagIndices(args, "--config");
-    expect(indices).toHaveLength(2);
+    expect(indices).toHaveLength(3);
     expect(args[getRequiredIndex(indices, 0) + 1]).toBe("key1=val1");
     expect(args[getRequiredIndex(indices, 1) + 1]).toBe("key2=val2");
+  });
+
+  it("enables ephemeral execution when requested", () => {
+    const args = baseArgs(defaultOptions({ ephemeral: true }));
+    expect(args).toContain("--ephemeral");
   });
 
   it("includes --json when jsonlEvents is true", () => {

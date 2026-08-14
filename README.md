@@ -33,7 +33,9 @@ npm install @howells/envelope
 | `options.cwd` | `string` | `process.cwd()` | Working directory for the subprocess |
 | `options.env` | `NodeJS.ProcessEnv` | `process.env` | Environment variables for the subprocess |
 | `options.permissionMode` | `string` | `"dontAsk"` | One of `"default"`, `"plan"`, `"dontAsk"`, `"acceptEdits"`, `"bypassPermissions"`, `"auto"` |
-| `options.tools` | `string` | `""` | Tools flag; `""` (default) omits the flag entirely, `"default"` enables built-ins |
+| `options.effort` | `"low" \| "medium" \| "high"` | `"high"` | Reasoning effort passed to `--effort` |
+| `options.tools` | `string` | `"default"` | `"default"` keeps built-ins; `""` passes an explicit empty tool set |
+| `options.sessionPersistence` | `boolean` | `true` | Set false to pass `--no-session-persistence` |
 | `options.systemPrompt` | `string` | — | Full system prompt via `--system-prompt` |
 | `options.appendSystemPrompt` | `string` | — | Appended system prompt via `--append-system-prompt` |
 | `options.allowedTools` | `string[]` | `[]` | Repeated `--allowedTools` per entry |
@@ -58,6 +60,8 @@ Note: `total_cost_usd` is reported by the Claude Code CLI. If you're using a sub
 | `options.codexPath` | `string` | `"codex"` | Path to the `codex` binary |
 | `options.cwd` | `string` | `process.cwd()` | Working directory for the subprocess |
 | `options.env` | `NodeJS.ProcessEnv` | `process.env` | Environment variables for the subprocess |
+| `options.effort` | `"low" \| "medium" \| "high" \| "xhigh"` | `"high"` | Model reasoning effort |
+| `options.ephemeral` | `boolean` | `false` | Run without persisting rollout files |
 | `options.skipGitRepoCheck` | `boolean` | `true` | Skip git repo validation via `--skip-git-repo-check` |
 | `options.sandbox` | `string` | `"workspace-write"` | One of `"read-only"`, `"workspace-write"`, `"danger-full-access"` |
 | `options.profile` | `string` | — | Profile name via `--profile` |
@@ -128,6 +132,40 @@ const summarizeGemini = createEnvelope({
 const out = await summarizeClaude({ text: "..." });
 console.log(out.summary);
 ```
+
+## Safe, receipted calls
+
+Use the safe factories when prompts include untrusted documents or web evidence. They
+require an explicit working directory and enforce tool-free/ephemeral Claude execution or
+read-only/ephemeral Codex execution.
+
+```ts
+import { z } from "zod";
+import {
+  createReceiptedEnvelope,
+  createSafeClaudeCodeClient,
+} from "@howells/envelope";
+
+const analyze = createReceiptedEnvelope({
+  client: createSafeClaudeCodeClient({
+    cwd: "/tmp/my-analysis",
+    model: "opus",
+  }),
+  input: z.object({ evidence: z.string().min(1) }),
+  output: z.object({ finding: z.string().min(1) }),
+  prompt: ({ evidence }) => `Analyze this evidence:\n${evidence}`,
+});
+
+const { output, receipt } = await analyze(
+  { evidence: "..." },
+  { signal: AbortSignal.timeout(120_000) },
+);
+```
+
+Receipts contain model/CLI identity, timing, attempts, provider metadata, and SHA-256
+digests of inputs, schemas, configuration, and validated output. Prompt and result content
+are not retained. Failed calls throw `EnvelopeInvocationError` with the same redacted
+receipt attached.
 
 ## Usage (AI SDK 6)
 

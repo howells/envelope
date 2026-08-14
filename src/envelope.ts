@@ -1,6 +1,14 @@
 import type { z } from "zod";
 import type { CliClient } from "./client.js";
 import { createClaudeCodeClient, jsonSchemaFromZod } from "./client.js";
+import {
+  buildInvocationReceipt,
+  classifyInvocationFailure,
+  type InvocationFailureKind,
+  type InvocationReceipt,
+  type ReceiptSeed,
+  redactedFailureMessage,
+} from "./receipt.js";
 
 /**
  * Error thrown by {@link createEnvelope} when either:
@@ -13,6 +21,19 @@ import { createClaudeCodeClient, jsonSchemaFromZod } from "./client.js";
  */
 export class EnvelopeError extends Error {
   override name = "EnvelopeError";
+}
+
+/** Error raised by the receipted API, carrying the redacted failed invocation receipt. */
+export class EnvelopeInvocationError extends EnvelopeError {
+  override name = "EnvelopeInvocationError";
+
+  constructor(
+    message: string,
+    readonly receipt: InvocationReceipt,
+    options?: ErrorOptions,
+  ) {
+    super(message, options);
+  }
 }
 
 /**
@@ -53,6 +74,125 @@ export interface CreateEnvelopeArgs<
    * the default backend for the high-level API.
    */
   client?: CliClient;
+}
+
+/** Per-call controls accepted by receipted envelopes. */
+export interface EnvelopeInvocationOptions {
+  signal?: AbortSignal;
+}
+
+/** Successful return shape from {@link createReceiptedEnvelope}. */
+export interface ReceiptedEnvelopeResult<T> {
+  output: T;
+  receipt: InvocationReceipt;
+}
+
+function failedReceipt(args: {
+  error: unknown;
+  failureKind?: InvocationFailureKind;
+  seed: ReceiptSeed;
+}): InvocationReceipt {
+  const classified = classifyInvocationFailure(args.error);
+  const kind = args.failureKind ?? classified.kind;
+  return buildInvocationReceipt({
+    error: {
+      kind,
+      message: redactedFailureMessage(kind),
+    },
+    finishedAt: new Date(),
+    seed: args.seed,
+  });
+}
+
+/**
+ * Creates the receipted form of an envelope without changing the legacy API.
+ *
+ * Successful calls return validated output plus a redacted invocation receipt. Failed
+ * calls throw {@link EnvelopeInvocationError}; its receipt is safe to persist because it
+ * contains digests rather than prompt, schema, result, or subprocess stderr content.
+ */
+export function createReceiptedEnvelope<
+  TIn extends z.ZodTypeAny,
+  TOut extends z.ZodTypeAny,
+>(args: CreateEnvelopeArgs<TIn, TOut>) {
+  const jsonSchema = jsonSchemaFromZod(args.output);
+  const client = args.client ?? createClaudeCodeClient();
+
+  return async (
+    inputRaw: unknown,
+    options?: EnvelopeInvocationOptions,
+  ): Promise<ReceiptedEnvelopeResult<z.infer<TOut>>> => {
+    const startedAt = new Date();
+    const seed: ReceiptSeed = {
+      config: {
+        model: client.model,
+        profileId: client.profileId,
+        tool: client.tool,
+      },
+      input: inputRaw,
+      model: client.model,
+      profileId: client.profileId,
+      schema: jsonSchema,
+      startedAt,
+      tool: client.tool,
+    };
+
+    const input = args.input.safeParse(inputRaw);
+    if (!input.success) {
+      const receipt = failedReceipt({
+        error: input.error,
+        failureKind: "input_validation",
+        seed,
+      });
+      throw new EnvelopeInvocationError(input.error.message, receipt, {
+        cause: input.error,
+      });
+    }
+
+    try {
+      const prompt = args.prompt(input.data);
+      const res = await client.structured<unknown>({
+        prompt,
+        jsonSchema,
+        signal: options?.signal,
+      });
+      const output = args.output.safeParse(res.structured);
+      if (!output.success) {
+        const receipt = buildInvocationReceipt({
+          error: {
+            kind: "output_validation",
+            message: redactedFailureMessage("output_validation"),
+          },
+          finishedAt: new Date(),
+          meta: res.meta,
+          seed,
+        });
+        throw new EnvelopeInvocationError(
+          `Model returned invalid structured output:\n${output.error.message}`,
+          receipt,
+          { cause: output.error },
+        );
+      }
+
+      const receipt = buildInvocationReceipt({
+        finishedAt: new Date(),
+        meta: res.meta,
+        output: output.data,
+        seed,
+      });
+      return { output: output.data, receipt };
+    } catch (error) {
+      if (error instanceof EnvelopeInvocationError) {
+        throw error;
+      }
+      const receipt = failedReceipt({ error, seed });
+      throw new EnvelopeInvocationError(
+        error instanceof Error ? error.message : String(error),
+        receipt,
+        { cause: error },
+      );
+    }
+  };
 }
 
 /**

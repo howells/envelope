@@ -4,6 +4,8 @@ import {
   createClaudeCodeClient,
   createCodexClient,
   createGeminiClient,
+  createSafeClaudeCodeClient,
+  createSafeCodexClient,
   jsonSchemaFromZod,
 } from "./client.js";
 
@@ -102,6 +104,18 @@ describe("createCodexClient", () => {
     });
     expect(client.tool).toBe("codex");
     expect(client.model).toBe("o3");
+  });
+});
+
+describe("safe execution profiles", () => {
+  it("marks the Claude profile as tool-free and ephemeral", () => {
+    const client = createSafeClaudeCodeClient({ cwd: "/tmp/envelope" });
+    expect(client.profileId).toBe("claude-tool-free-ephemeral-v1");
+  });
+
+  it("marks the Codex profile as read-only and ephemeral", () => {
+    const client = createSafeCodexClient({ cwd: "/tmp/envelope" });
+    expect(client.profileId).toBe("codex-read-only-ephemeral-v1");
   });
 });
 

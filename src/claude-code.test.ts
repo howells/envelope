@@ -9,10 +9,12 @@ import {
 } from "./claude-code.js";
 
 interface MockStream extends EventEmitter {
+  end: ReturnType<typeof vi.fn>;
   setEncoding: ReturnType<typeof vi.fn>;
 }
 
 interface MockChild extends EventEmitter {
+  stdin: MockStream;
   stdout: MockStream;
   stderr: MockStream;
   kill: ReturnType<typeof vi.fn>;
@@ -55,6 +57,8 @@ describe("buildBaseArgs", () => {
       "-p",
       "--permission-mode",
       "dontAsk",
+      "--effort",
+      "high",
     ]);
   });
 
@@ -139,11 +143,11 @@ describe("buildBaseArgs", () => {
     expect(args).not.toContain("--agents");
   });
 
-  it("includes --tools when explicitly set", () => {
-    const opts = defaultClaudeOptions({ tools: "default" });
+  it("passes an explicit empty tool set for safe profiles", () => {
+    const opts = defaultClaudeOptions({ tools: "" });
     const args = buildBaseArgs(opts);
     expect(args).toContain("--tools");
-    expect(args[args.indexOf("--tools") + 1]).toBe("default");
+    expect(args[args.indexOf("--tools") + 1]).toBe("");
   });
 
   it("respects non-default permissionMode", () => {
@@ -167,7 +171,9 @@ describe("defaultClaudeOptions", () => {
     expect(opts.retries).toBe(1);
     expect(opts.retryDelayMs).toBe(800);
     expect(opts.permissionMode).toBe("dontAsk");
-    expect(opts.tools).toBe("");
+    expect(opts.tools).toBe("default");
+    expect(opts.effort).toBe("high");
+    expect(opts.sessionPersistence).toBe(true);
     expect(opts.systemPrompt).toBe("");
     expect(opts.appendSystemPrompt).toBe("");
     expect(opts.allowedTools).toEqual([]);
@@ -202,8 +208,13 @@ function createMockChild(stdout: string, exitCode: number, signal?: string) {
   const stderrStream = new EventEmitter() as MockStream;
   stdoutStream.setEncoding = vi.fn();
   stderrStream.setEncoding = vi.fn();
+  stdoutStream.end = vi.fn();
+  stderrStream.end = vi.fn();
   child.stdout = stdoutStream;
   child.stderr = stderrStream;
+  child.stdin = new EventEmitter() as MockStream;
+  child.stdin.setEncoding = vi.fn();
+  child.stdin.end = vi.fn();
   child.kill = vi.fn();
 
   setTimeout(() => {
@@ -368,7 +379,24 @@ describe("claudeCodeStructured", () => {
     expect(args).toContain("--allowedTools");
     expect(args[args.indexOf("--allowedTools") + 1]).toBe("Read");
     expect(args).toContain("--json-schema");
-    expect(args.at(-1)).toBe("hello");
+    expect(args).not.toContain("hello");
+    expect(args.at(-1)).toBe('{"type":"object"}');
+    expect(nextChild).toBeNull();
+  });
+
+  it("writes the prompt through stdin instead of argv", async () => {
+    const child = createMockChild(
+      JSON.stringify({ result: "ok", structured_output: {} }),
+      0,
+    );
+    setNextChild(child);
+
+    await claudeCodeStructured({
+      prompt: "untrusted evidence body",
+      jsonSchema: '{"type":"object"}',
+    });
+
+    expect(child.stdin.end).toHaveBeenCalledWith("untrusted evidence body");
   });
 });
 

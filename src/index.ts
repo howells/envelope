@@ -23,6 +23,8 @@ export {
   createClaudeCodeClient,
   createCodexClient,
   createGeminiClient,
+  createSafeClaudeCodeClient,
+  createSafeCodexClient,
   type GenerateStructuredArgs,
   type GenerateTextArgs,
   jsonSchemaFromZod,
@@ -35,9 +37,12 @@ export {
 export {
   type CreateEnvelopeArgs,
   createEnvelope,
+  createReceiptedEnvelope,
   EnvelopeError,
+  EnvelopeInvocationError,
+  type EnvelopeInvocationOptions,
+  type ReceiptedEnvelopeResult,
 } from "./envelope.js";
-
 export {
   buildGeminiArgs,
   defaultGeminiOptions,
@@ -45,3 +50,7 @@ export {
   geminiStructured,
   geminiText,
 } from "./gemini-cli.js";
+export type {
+  InvocationFailureKind,
+  InvocationReceipt,
+} from "./receipt.js";

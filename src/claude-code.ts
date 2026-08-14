@@ -57,6 +57,8 @@ export interface ClaudeCodeOptions {
    * Defaults to the current process environment.
    */
   env?: NodeJS.ProcessEnv;
+  /** Claude reasoning effort passed through to `--effort`. */
+  effort?: "low" | "medium" | "high";
   /**
    * Fallback model used by Claude Code when the primary model is overloaded.
    */
@@ -94,6 +96,8 @@ export interface ClaudeCodeOptions {
    * Replaces the default Claude system prompt.
    */
   systemPrompt?: string;
+  /** Keep Claude Code session state after the invocation. Defaults to true. */
+  sessionPersistence?: boolean;
   /**
    * Maximum time to allow the subprocess to run before attempting termination.
    */
@@ -101,8 +105,8 @@ export interface ClaudeCodeOptions {
   /**
    * Built-in tool configuration.
    *
-   * An empty string omits the `--tools` flag entirely. Use `"default"` to opt into the
-   * CLI's default tool set, or provide explicit tool names as supported by Claude Code.
+   * `"default"` omits the flag and keeps the CLI's built-in tools. An empty string passes
+   * an explicit empty tool set, or provide explicit tool names as supported by Claude Code.
    */
   tools?: string;
 }
@@ -126,6 +130,7 @@ export interface ClaudeCodeEnvelope<TStructured> {
 }
 
 interface ClaudeCliError extends Error {
+  aborted?: boolean;
   cause?: unknown;
   code?: number | string | null;
   killed?: boolean;
@@ -133,17 +138,10 @@ interface ClaudeCliError extends Error {
 }
 
 /**
- * Conservative per-argument transport limit used for Claude Code requests.
- *
- * Claude currently accepts prompt and schema payloads only as argv strings in this wrapper.
- * The limit intentionally errs on the safe side to fail early before hitting OS-specific
- * command-line length limits.
+ * Conservative schema-argument transport limit used for Claude Code requests.
+ * Prompts are supplied through stdin and therefore are not subject to argv limits.
  */
 const MAX_CLAUDE_ARG_BYTES = 128 * 1024;
-/**
- * Conservative combined transport limit for prompt plus JSON schema payload size.
- */
-const MAX_CLAUDE_COMBINED_ARG_BYTES = 256 * 1024;
 
 /**
  * Checks whether a value is a non-null, non-array object.
@@ -192,22 +190,16 @@ export function selectResultEnvelope(
 }
 
 /**
- * Validates that prompt and schema payloads are small enough to transport over argv.
+ * Validates that the schema payload is small enough to transport over argv.
  *
- * @param prompt - Prompt text that will be appended to the Claude Code command line.
  * @param jsonSchema - Optional JSON schema string appended in structured mode.
  * @throws {Error} Thrown when the payload exceeds the conservative transport budget.
  */
-function assertClaudeArgSize(prompt: string, jsonSchema?: string) {
-  const promptBytes = Buffer.byteLength(prompt, "utf8");
+function assertClaudeArgSize(jsonSchema?: string) {
   const schemaBytes = Buffer.byteLength(jsonSchema ?? "", "utf8");
-  if (
-    promptBytes > MAX_CLAUDE_ARG_BYTES ||
-    schemaBytes > MAX_CLAUDE_ARG_BYTES ||
-    promptBytes + schemaBytes > MAX_CLAUDE_COMBINED_ARG_BYTES
-  ) {
+  if (schemaBytes > MAX_CLAUDE_ARG_BYTES) {
     throw new Error(
-      "claude CLI prompt/schema exceeds the safe argv transport limit; reduce the payload size before calling this wrapper",
+      "claude CLI schema exceeds the safe argv transport limit; reduce the schema before calling this wrapper",
     );
   }
 }
@@ -225,23 +217,35 @@ function spawnAsync(
   opts: {
     cwd?: string;
     env?: NodeJS.ProcessEnv;
-    timeoutMs?: number;
     maxBufferBytes?: number;
+    signal?: AbortSignal;
+    stdin?: string;
+    timeoutMs?: number;
   },
 ) {
   return new Promise<{ stdout: string; stderr: string }>((resolve, reject) => {
     const child = spawn(file, args, {
       cwd: opts.cwd,
       env: opts.env,
-      stdio: ["ignore", "pipe", "pipe"],
+      stdio: ["pipe", "pipe", "pipe"],
     });
 
     const maxBufferBytes = opts.maxBufferBytes ?? 128 * 1024 * 1024;
     let stdout = "";
     let stderr = "";
+    let killedByAbort = false;
     let killedByTimeout = false;
     let timeout: NodeJS.Timeout | null = null;
     let hardKill: NodeJS.Timeout | null = null;
+
+    const abort = () => {
+      killedByAbort = true;
+      try {
+        child.kill("SIGTERM");
+      } catch {
+        // The close/error handler owns settlement.
+      }
+    };
 
     const cleanup = () => {
       if (timeout) {
@@ -252,6 +256,7 @@ function spawnAsync(
         clearTimeout(hardKill);
         hardKill = null;
       }
+      opts.signal?.removeEventListener("abort", abort);
     };
 
     const maybeKillOnBuffer = () => {
@@ -299,6 +304,12 @@ function spawnAsync(
       }, opts.timeoutMs);
     }
 
+    if (opts.signal?.aborted) {
+      abort();
+    } else {
+      opts.signal?.addEventListener("abort", abort, { once: true });
+    }
+
     child.on("error", (err) => {
       cleanup();
       const e = new Error(`claude CLI spawn error: ${String(err)}`);
@@ -309,6 +320,15 @@ function spawnAsync(
 
     child.on("close", (code, signal) => {
       cleanup();
+      if (killedByAbort) {
+        const error = new Error(
+          "claude CLI invocation aborted",
+        ) as ClaudeCliError;
+        error.aborted = true;
+        error.signal = signal;
+        reject(error);
+        return;
+      }
       if (code !== 0) {
         const e = new Error(
           `claude CLI failed (code=${code ?? "?"}, signal=${
@@ -324,6 +344,8 @@ function spawnAsync(
       }
       resolve({ stdout, stderr });
     });
+
+    child.stdin?.end(opts.stdin ?? "");
   });
 }
 
@@ -340,14 +362,16 @@ export function defaultClaudeOptions(
     claudePath: opts?.claudePath ?? "claude",
     cwd: opts?.cwd ?? process.cwd(),
     env: opts?.env ?? process.env,
+    effort: opts?.effort ?? "high",
     model: opts?.model ?? "opus",
     maxBudgetUsd: opts?.maxBudgetUsd ?? 5,
     timeoutMs: opts?.timeoutMs ?? 120_000,
     retries: opts?.retries ?? 1,
     retryDelayMs: opts?.retryDelayMs ?? 800,
     permissionMode: opts?.permissionMode ?? "dontAsk",
-    tools: opts?.tools ?? "",
+    tools: opts?.tools ?? "default",
     systemPrompt: opts?.systemPrompt ?? "",
+    sessionPersistence: opts?.sessionPersistence ?? true,
     appendSystemPrompt: opts?.appendSystemPrompt ?? "",
     allowedTools: opts?.allowedTools ?? [],
     disallowedTools: opts?.disallowedTools ?? [],
@@ -375,8 +399,12 @@ export function buildBaseArgs(opts: Required<ClaudeCodeOptions>) {
     "--permission-mode",
     opts.permissionMode,
   ];
-  if (opts.tools) {
+  if (opts.tools !== "default") {
     args.push("--tools", opts.tools);
+  }
+  args.push("--effort", opts.effort);
+  if (!opts.sessionPersistence) {
+    args.push("--no-session-persistence");
   }
   if (opts.systemPrompt) {
     args.push("--system-prompt", opts.systemPrompt);
@@ -408,8 +436,27 @@ export function buildBaseArgs(opts: Required<ClaudeCodeOptions>) {
 /**
  * Promise-based sleep helper used for linear retry backoff.
  */
-function sleep(ms: number) {
-  return new Promise<void>((r) => setTimeout(r, ms));
+function sleep(ms: number, signal?: AbortSignal) {
+  return new Promise<void>((resolve, reject) => {
+    let timeout: NodeJS.Timeout;
+    const abort = () => {
+      clearTimeout(timeout);
+      const error = new Error(
+        "claude CLI invocation aborted",
+      ) as ClaudeCliError;
+      error.aborted = true;
+      reject(error);
+    };
+    timeout = setTimeout(() => {
+      signal?.removeEventListener("abort", abort);
+      resolve();
+    }, ms);
+    if (signal?.aborted) {
+      abort();
+      return;
+    }
+    signal?.addEventListener("abort", abort, { once: true });
+  });
 }
 
 /**
@@ -429,20 +476,29 @@ function isTimeoutKill(err: unknown) {
 async function spawnWithRetry(
   options: Required<ClaudeCodeOptions>,
   cliArgs: string[],
-): Promise<string> {
+  prompt: string,
+  signal?: AbortSignal,
+): Promise<{ attemptCount: number; stdout: string }> {
   let stdout: string | null = null;
   let lastErr: unknown = null;
+  let attemptCount = 0;
   for (let attempt = 0; attempt <= options.retries; attempt++) {
+    attemptCount = attempt + 1;
     try {
       ({ stdout } = await spawnAsync(options.claudePath, cliArgs, {
         cwd: options.cwd,
         env: options.env,
+        signal,
+        stdin: prompt,
         timeoutMs: options.timeoutMs,
       }));
       lastErr = null;
       break;
     } catch (e) {
       lastErr = e;
+      if ((e as ClaudeCliError).aborted) {
+        throw e;
+      }
       if (
         !isTimeoutKill((e as ClaudeCliError | null)?.cause ?? e) ||
         attempt >= options.retries
@@ -450,7 +506,7 @@ async function spawnWithRetry(
         throw e;
       }
       const delay = options.retryDelayMs * (attempt + 1);
-      await sleep(delay);
+      await sleep(delay, signal);
     }
   }
 
@@ -458,13 +514,13 @@ async function spawnWithRetry(
     throw lastErr instanceof Error ? lastErr : new Error("claude CLI failed");
   }
 
-  return stdout;
+  return { attemptCount, stdout };
 }
 
 /**
  * Requests structured output from Claude Code using `--output-format json`.
  *
- * The function validates argv transport size, spawns Claude Code, parses the returned JSON
+ * The function validates schema transport size, sends the prompt over stdin, parses the returned JSON
  * envelope, and throws when Claude signals an error envelope or emits malformed JSON.
  * Both CLI output shapes are accepted: a single envelope object, or an array of stream
  * events whose terminal `result` event carries the reply.
@@ -477,16 +533,17 @@ async function spawnWithRetry(
  * @returns The parsed Claude JSON envelope, including `structured_output`.
  *
  * @throws {Error}
- * Thrown when the prompt/schema is too large for argv transport, the subprocess fails,
+ * Thrown when the schema is too large for argv transport, the subprocess fails,
  * the response is not valid JSON, or Claude returns an error envelope.
  */
 export async function claudeCodeStructured<TStructured>(args: {
   prompt: string;
   jsonSchema: string;
   options?: ClaudeCodeOptions;
+  signal?: AbortSignal;
 }) {
   const options = defaultClaudeOptions(args.options);
-  assertClaudeArgSize(args.prompt, args.jsonSchema);
+  assertClaudeArgSize(args.jsonSchema);
 
   const cliArgs = [
     ...buildBaseArgs(options),
@@ -496,10 +553,14 @@ export async function claudeCodeStructured<TStructured>(args: {
     "json",
     "--json-schema",
     args.jsonSchema,
-    args.prompt,
   ];
 
-  const stdout = await spawnWithRetry(options, cliArgs);
+  const { attemptCount, stdout } = await spawnWithRetry(
+    options,
+    cliArgs,
+    args.prompt,
+    args.signal,
+  );
 
   let envelopeUnknown: unknown;
   try {
@@ -524,7 +585,7 @@ export async function claudeCodeStructured<TStructured>(args: {
     );
   }
 
-  return envelope;
+  return { ...envelope, attempt_count: attemptCount };
 }
 
 /**
@@ -542,7 +603,7 @@ export async function claudeCodeStructured<TStructured>(args: {
  * @returns An object containing the extracted text response.
  *
  * @throws {Error}
- * Thrown when the prompt is too large for argv transport, the subprocess fails, the parsed
+ * Thrown when the subprocess fails, the parsed
  * JSON envelope reports `is_error: true`, or the envelope carries no `result` field at all.
  * A missing `result` is treated as an error rather than an empty reply so that a breaking
  * CLI output change cannot degrade silently into empty text; an explicit empty string is
@@ -551,9 +612,9 @@ export async function claudeCodeStructured<TStructured>(args: {
 export async function claudeCodeText(args: {
   prompt: string;
   options?: ClaudeCodeOptions;
+  signal?: AbortSignal;
 }) {
   const options = defaultClaudeOptions(args.options);
-  assertClaudeArgSize(args.prompt);
 
   const cliArgs = [
     ...buildBaseArgs(options),
@@ -561,22 +622,26 @@ export async function claudeCodeText(args: {
     String(options.maxBudgetUsd),
     "--output-format",
     "json",
-    args.prompt,
   ];
 
-  const stdout = await spawnWithRetry(options, cliArgs);
+  const { attemptCount, stdout } = await spawnWithRetry(
+    options,
+    cliArgs,
+    args.prompt,
+    args.signal,
+  );
 
   let envelopeUnknown: unknown;
   try {
     envelopeUnknown = JSON.parse(stdout) as unknown;
   } catch {
     // fallback: if the user configured output-format defaults, just return the raw stdout
-    return { text: stdout };
+    return { attempt_count: attemptCount, text: stdout };
   }
 
   const selected = selectResultEnvelope(envelopeUnknown);
   if (!selected) {
-    return { text: stdout };
+    return { attempt_count: attemptCount, text: stdout };
   }
 
   const envelope = selected as ClaudeCodeEnvelope<unknown>;
@@ -593,6 +658,7 @@ export async function claudeCodeText(args: {
     );
   }
   return {
+    attempt_count: attemptCount,
     text: envelope.result,
     total_cost_usd: envelope.total_cost_usd,
     session_id: envelope.session_id,

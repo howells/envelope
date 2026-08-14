@@ -103,13 +103,22 @@ function emptyUsage(): LanguageModelV3Usage {
 function metaToProviderMetadata(
   meta: CliResultMeta | undefined,
 ): SharedV3ProviderMetadata | undefined {
-  if (!(meta?.costUsd || meta?.sessionId)) {
+  if (!meta) {
     return undefined;
   }
   return {
     envelope: {
+      ...(meta.attemptCount !== undefined && {
+        attemptCount: meta.attemptCount,
+      }),
+      ...(meta.cliVersion !== undefined && { cliVersion: meta.cliVersion }),
       ...(meta.costUsd !== undefined && { costUsd: meta.costUsd }),
+      ...(meta.resolvedModel !== undefined && {
+        resolvedModel: meta.resolvedModel,
+      }),
       ...(meta.sessionId !== undefined && { sessionId: meta.sessionId }),
+      ...(meta.stopReason !== undefined && { stopReason: meta.stopReason }),
+      ...(meta.tokenUsage !== undefined && { tokenUsage: meta.tokenUsage }),
     } as JSONObject,
   };
 }
@@ -234,6 +243,7 @@ export function cliModel(args: {
         const res = await client.structured<unknown>({
           prompt: promptText,
           jsonSchema: schema,
+          signal: callOptions.abortSignal,
         });
         const text = JSON.stringify(res.structured ?? null);
         return {
@@ -246,7 +256,10 @@ export function cliModel(args: {
       }
 
       // Plain text mode (default)
-      const res = await client.text({ prompt: promptText });
+      const res = await client.text({
+        prompt: promptText,
+        signal: callOptions.abortSignal,
+      });
       return {
         content: [{ type: "text" as const, text: res.text }],
         finishReason: STOP_FINISH,

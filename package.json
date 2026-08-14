@@ -1,6 +1,6 @@
 {
   "name": "@howells/envelope",
-  "version": "0.3.2",
+  "version": "0.4.0",
   "private": false,
   "description": "Strict Zod IO wrapper around local CLI LLMs (Claude Code, Codex, Gemini), plus an AI SDK adapter.",
   "type": "module",
@@ -35,14 +35,14 @@
     "node": ">=20"
   },
   "scripts": {
-    "build": "turbo run build",
+    "build": "tsc",
     "dev": "turbo run dev --filter=@howells/envelope-playground",
     "prepack": "pnpm build",
-    "test": "turbo run test",
-    "typecheck": "turbo run typecheck",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
     "prepare": "husky",
     "format": "howells-format",
-    "lint": "turbo run lint",
+    "lint": "howells-biome check src",
     "knip": "knip",
     "dev:all": "turbo run dev --parallel",
     "check": "pnpm typecheck && pnpm lint && pnpm test",

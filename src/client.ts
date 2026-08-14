@@ -1,3 +1,4 @@
+import { execFile } from "node:child_process";
 import type { JSONSchema7 } from "@ai-sdk/provider";
 import type { z } from "zod";
 import { toJSONSchema } from "zod/v4";
@@ -14,11 +15,16 @@ import {
 } from "./gemini-cli.js";
 
 function extractClaudeMeta(envelope: {
+  attempt_count?: number;
+  model?: string;
   total_cost_usd?: number;
   session_id?: string;
   stop_reason?: string | null;
 }): CliResultMeta {
   return {
+    ...(envelope.attempt_count !== undefined && {
+      attemptCount: envelope.attempt_count,
+    }),
     ...(envelope.total_cost_usd !== undefined && {
       costUsd: envelope.total_cost_usd,
     }),
@@ -28,6 +34,35 @@ function extractClaudeMeta(envelope: {
     ...(envelope.stop_reason !== undefined && {
       stopReason: envelope.stop_reason,
     }),
+    ...(envelope.model !== undefined && {
+      resolvedModel: envelope.model,
+    }),
+  };
+}
+
+function createVersionReader(args: {
+  cwd?: string;
+  env?: NodeJS.ProcessEnv;
+  file: string;
+}): () => Promise<string | undefined> {
+  let cached: Promise<string | undefined> | undefined;
+  return () => {
+    cached ??= new Promise((resolve) => {
+      execFile(
+        args.file,
+        ["--version"],
+        { cwd: args.cwd, env: args.env, timeout: 5_000 },
+        (error, stdout, stderr) => {
+          if (error) {
+            resolve(undefined);
+            return;
+          }
+          const version = `${stdout}${stderr}`.trim().split(/\r?\n/, 1)[0];
+          resolve(version || undefined);
+        },
+      );
+    });
+    return cached;
   };
 }
 
@@ -44,6 +79,8 @@ export interface GenerateTextArgs {
    * Prompt text to send to the model.
    */
   prompt: string;
+  /** Cancels the subprocess and prevents further retry attempts. */
+  signal?: AbortSignal;
 }
 
 /**
@@ -58,6 +95,8 @@ export interface GenerateStructuredArgs {
    * Prompt text to send to the model.
    */
   prompt: string;
+  /** Cancels the subprocess and prevents further retry attempts. */
+  signal?: AbortSignal;
 }
 
 /**
@@ -67,9 +106,17 @@ export interface GenerateStructuredArgs {
  * Codex and Gemini currently return no metadata.
  */
 export interface CliResultMeta {
+  attemptCount?: number;
+  cliVersion?: string;
   costUsd?: number;
   sessionId?: string;
   stopReason?: string | null;
+  resolvedModel?: string;
+  tokenUsage?: {
+    input?: number;
+    output?: number;
+    total?: number;
+  };
 }
 
 /**
@@ -85,6 +132,8 @@ export interface CliClient {
    * Model identifier configured for this client.
    */
   model: string;
+  /** Identifier of the enforced execution profile, when one is active. */
+  profileId?: string;
   /**
    * Executes a structured generation request and returns already-parsed output.
    *
@@ -101,6 +150,8 @@ export interface CliClient {
    * Name of the backing CLI implementation.
    */
   tool: CliTool;
+  /** Reads the installed provider CLI version; failures resolve as undefined. */
+  version?: () => Promise<string | undefined>;
 }
 
 /**
@@ -150,6 +201,7 @@ export function jsonSchemaFromZod(schema: z.ZodTypeAny): JSONSchema7 {
 export function createClaudeCodeClient(args?: {
   model?: string;
   maxBudgetUsd?: number;
+  profileId?: string;
   timeoutMs?: number;
   options?: Omit<ClaudeCodeOptions, "model" | "maxBudgetUsd" | "timeoutMs">;
 }): CliClient {
@@ -157,29 +209,44 @@ export function createClaudeCodeClient(args?: {
   const model = cfg?.model ?? "opus";
   const maxBudgetUsd = cfg?.maxBudgetUsd ?? 5;
   const timeoutMs = cfg?.timeoutMs ?? 120_000;
+  const version = createVersionReader({
+    cwd: cfg?.options?.cwd,
+    env: cfg?.options?.env,
+    file: cfg?.options?.claudePath ?? "claude",
+  });
 
   return {
     tool: "claude-code",
     model,
+    ...(cfg?.profileId ? { profileId: cfg.profileId } : {}),
+    version,
     async text(input: GenerateTextArgs) {
-      const res = await claudeCodeText({
-        prompt: input.prompt,
-        options: { ...cfg?.options, model, maxBudgetUsd, timeoutMs },
-      });
+      const [res, cliVersion] = await Promise.all([
+        claudeCodeText({
+          prompt: input.prompt,
+          signal: input.signal,
+          options: { ...cfg?.options, model, maxBudgetUsd, timeoutMs },
+        }),
+        version(),
+      ]);
       return {
         text: res.text,
-        meta: extractClaudeMeta(res),
+        meta: { ...extractClaudeMeta(res), cliVersion },
       };
     },
     async structured<T>(input: GenerateStructuredArgs) {
-      const envelope = await claudeCodeStructured<T>({
-        prompt: input.prompt,
-        jsonSchema: JSON.stringify(input.jsonSchema),
-        options: { ...cfg?.options, model, maxBudgetUsd, timeoutMs },
-      });
+      const [envelope, cliVersion] = await Promise.all([
+        claudeCodeStructured<T>({
+          prompt: input.prompt,
+          jsonSchema: JSON.stringify(input.jsonSchema),
+          signal: input.signal,
+          options: { ...cfg?.options, model, maxBudgetUsd, timeoutMs },
+        }),
+        version(),
+      ]);
       return {
         structured: envelope.structured_output as T,
-        meta: extractClaudeMeta(envelope),
+        meta: { ...extractClaudeMeta(envelope), cliVersion },
       };
     },
   };
@@ -208,32 +275,96 @@ export function createClaudeCodeClient(args?: {
  */
 export function createCodexClient(args?: {
   model?: string;
+  profileId?: string;
   timeoutMs?: number;
   options?: Omit<CodexOptions, "model" | "timeoutMs">;
 }): CliClient {
   const cfg = args;
   const model = cfg?.model ?? "gpt-5.3-codex";
   const timeoutMs = cfg?.timeoutMs ?? 180_000;
+  const version = createVersionReader({
+    cwd: cfg?.options?.cwd,
+    env: cfg?.options?.env,
+    file: cfg?.options?.codexPath ?? "codex",
+  });
 
   return {
     tool: "codex",
     model,
+    ...(cfg?.profileId ? { profileId: cfg.profileId } : {}),
+    version,
     async text(input: GenerateTextArgs) {
-      const res = await codexText({
-        prompt: input.prompt,
-        options: { ...cfg?.options, model, timeoutMs },
-      });
-      return { text: res.text };
+      const [res, cliVersion] = await Promise.all([
+        codexText({
+          prompt: input.prompt,
+          signal: input.signal,
+          options: { ...cfg?.options, model, timeoutMs },
+        }),
+        version(),
+      ]);
+      return { text: res.text, meta: { attemptCount: 1, cliVersion } };
     },
     async structured<T>(input: GenerateStructuredArgs) {
-      const res = await codexStructured<T>({
-        prompt: input.prompt,
-        jsonSchema: JSON.stringify(input.jsonSchema),
-        options: { ...cfg?.options, model, timeoutMs },
-      });
-      return { structured: res.structured };
+      const [res, cliVersion] = await Promise.all([
+        codexStructured<T>({
+          prompt: input.prompt,
+          jsonSchema: JSON.stringify(input.jsonSchema),
+          signal: input.signal,
+          options: { ...cfg?.options, model, timeoutMs },
+        }),
+        version(),
+      ]);
+      return {
+        structured: res.structured,
+        meta: { attemptCount: 1, cliVersion },
+      };
     },
   };
+}
+
+/** Tool-free, ephemeral Claude profile for processing untrusted evidence. */
+export function createSafeClaudeCodeClient(args: {
+  cwd: string;
+  effort?: "low" | "medium" | "high";
+  maxBudgetUsd?: number;
+  model?: string;
+  retries?: number;
+  timeoutMs?: number;
+}): CliClient {
+  return createClaudeCodeClient({
+    model: args.model,
+    maxBudgetUsd: args.maxBudgetUsd,
+    profileId: "claude-tool-free-ephemeral-v1",
+    timeoutMs: args.timeoutMs,
+    options: {
+      cwd: args.cwd,
+      effort: args.effort,
+      permissionMode: "plan",
+      retries: args.retries,
+      sessionPersistence: false,
+      tools: "",
+    },
+  });
+}
+
+/** Read-only, ephemeral Codex profile for processing untrusted evidence. */
+export function createSafeCodexClient(args: {
+  cwd: string;
+  effort?: "low" | "medium" | "high" | "xhigh";
+  model?: string;
+  timeoutMs?: number;
+}): CliClient {
+  return createCodexClient({
+    model: args.model,
+    profileId: "codex-read-only-ephemeral-v1",
+    timeoutMs: args.timeoutMs,
+    options: {
+      cwd: args.cwd,
+      effort: args.effort,
+      ephemeral: true,
+      sandbox: "read-only",
+    },
+  });
 }
 
 /**
