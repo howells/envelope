@@ -54,6 +54,17 @@ export interface GeminiOptions {
    */
   sandbox?: boolean;
   /**
+   * Passes `--skip-trust`, so the CLI does not stop and ask whether the working
+   * directory is trusted.
+   *
+   * A headless caller has nobody to answer that question, and Gemini blocks
+   * rather than failing, so an automated run hangs until its timeout instead of
+   * returning. Callers that give Gemini no tools and a read-only posture are not
+   * relying on workspace trust for their safety, which is why the safe profile
+   * sets this. Defaults to `false` so an interactive caller keeps the prompt.
+   */
+  skipTrust?: boolean;
+  /**
    * Whether to enable Gemini debug mode.
    */
   debug?: boolean;
@@ -320,6 +331,7 @@ export function defaultGeminiOptions(
     timeoutMs: opts?.timeoutMs ?? 180_000,
     approvalMode: opts?.approvalMode ?? "plan",
     sandbox: opts?.sandbox ?? false,
+    skipTrust: opts?.skipTrust ?? false,
     debug: opts?.debug ?? false,
     policy: opts?.policy ?? [],
     adminPolicy: opts?.adminPolicy ?? [],
@@ -348,6 +360,9 @@ export function buildGeminiArgs(options: Required<GeminiOptions>) {
   }
   if (options.sandbox) {
     args.push("--sandbox");
+  }
+  if (options.skipTrust) {
+    args.push("--skip-trust");
   }
   for (const path of options.policy) {
     args.push("--policy", path);

@@ -388,6 +388,7 @@ export function createSafeGeminiClient(args: {
       cwd: args.cwd,
       extensions: [],
       sandbox: true,
+      skipTrust: true,
     },
   });
 }
