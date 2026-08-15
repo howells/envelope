@@ -69,7 +69,7 @@ function createVersionReader(args: {
 /**
  * Identifies the backing CLI used by a {@link CliClient}.
  */
-export type CliTool = "claude-code" | "codex" | "gemini";
+export type CliTool = "claude-code" | "codex" | "gemini" | "openrouter";
 
 /**
  * Arguments for plain-text model calls.

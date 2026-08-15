@@ -51,6 +51,11 @@ export {
   geminiStructured,
   geminiText,
 } from "./gemini-cli.js";
+export {
+  createOpenRouterClient,
+  createSafeOpenRouterClient,
+  type OpenRouterOptions,
+} from "./openrouter.js";
 export type {
   InvocationFailureKind,
   InvocationReceipt,
