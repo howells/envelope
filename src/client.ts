@@ -367,6 +367,31 @@ export function createSafeCodexClient(args: {
   });
 }
 
+/** Read-only, ephemeral Gemini profile for processing untrusted evidence.
+ *
+ * The third safe profile, added so a caller whose first two providers are
+ * exhausted still has somewhere safe to route. `plan` is Gemini's read-only
+ * approval posture, the sandbox is requested explicitly rather than inherited,
+ * and extensions are emptied so no tool surface is carried into a run that is
+ * reading untrusted text. */
+export function createSafeGeminiClient(args: {
+  cwd: string;
+  model?: string;
+  timeoutMs?: number;
+}): CliClient {
+  return createGeminiClient({
+    model: args.model,
+    profileId: "gemini-read-only-ephemeral-v1",
+    timeoutMs: args.timeoutMs,
+    options: {
+      approvalMode: "plan",
+      cwd: args.cwd,
+      extensions: [],
+      sandbox: true,
+    },
+  });
+}
+
 /**
  * Creates a high-level client backed by the Gemini CLI.
  *
@@ -392,6 +417,7 @@ export function createSafeCodexClient(args: {
  */
 export function createGeminiClient(args?: {
   model?: string;
+  profileId?: string;
   timeoutMs?: number;
   options?: Omit<GeminiOptions, "model" | "timeoutMs">;
 }): CliClient {
@@ -402,6 +428,7 @@ export function createGeminiClient(args?: {
   return {
     tool: "gemini",
     model,
+    ...(cfg?.profileId ? { profileId: cfg.profileId } : {}),
     async text(input: GenerateTextArgs) {
       const res = await geminiText({
         prompt: input.prompt,

@@ -12,6 +12,7 @@ export type InvocationFailureKind =
   | "spawn"
   | "timeout"
   | "transport"
+  | "usage_limit"
   | "unknown";
 
 /** Redacted account of one local CLI model invocation. */
@@ -62,6 +63,7 @@ const REDACTED_FAILURE_MESSAGES: Record<InvocationFailureKind, string> = {
   spawn: "Provider CLI could not be started",
   timeout: "Provider invocation timed out",
   transport: "Provider transport failed",
+  usage_limit: "Provider usage limit reached",
   unknown: "Invocation failed",
 };
 
@@ -115,6 +117,27 @@ export function buildInvocationReceipt(args: {
   };
 }
 
+/** Phrases the CLIs use when the account is out of quota rather than broken.
+ *  Kept separate because a usage limit is not a transport fault: retrying costs
+ *  time and cannot succeed, and the caller usually wants to route to another
+ *  provider instead. Claude Code, Codex and Gemini each word it differently. */
+const USAGE_LIMIT_PATTERNS = [
+  "usage limit",
+  "rate limit",
+  "rate_limit",
+  "quota",
+  "too many requests",
+  "429",
+  "purchase more credits",
+  "out of credits",
+] as const;
+
+/** True when a failure means "no capacity left on this account", not "broken". */
+export function isUsageLimit(message: string): boolean {
+  const normalized = message.toLowerCase();
+  return USAGE_LIMIT_PATTERNS.some((pattern) => normalized.includes(pattern));
+}
+
 /** Classify transport failures without exposing subprocess stderr or prompt content. */
 export function classifyInvocationFailure(
   error: unknown,
@@ -124,16 +147,18 @@ export function classifyInvocationFailure(
   const kind: InvocationFailureKind =
     normalized.includes("abort") || normalized.includes("cancel")
       ? "cancelled"
-      : normalized.includes("timedout") || normalized.includes("timeout")
-        ? "timeout"
-        : normalized.includes("spawn")
-          ? "spawn"
-          : normalized.includes("schema") || normalized.includes("json")
-            ? "schema"
-            : normalized.includes("transport") || normalized.includes("argv")
-              ? "transport"
-              : normalized.includes("cli") || normalized.includes("provider")
-                ? "provider"
-                : "unknown";
+      : isUsageLimit(normalized)
+        ? "usage_limit"
+        : normalized.includes("timedout") || normalized.includes("timeout")
+          ? "timeout"
+          : normalized.includes("spawn")
+            ? "spawn"
+            : normalized.includes("schema") || normalized.includes("json")
+              ? "schema"
+              : normalized.includes("transport") || normalized.includes("argv")
+                ? "transport"
+                : normalized.includes("cli") || normalized.includes("provider")
+                  ? "provider"
+                  : "unknown";
   return { kind, message: redactedFailureMessage(kind) };
 }

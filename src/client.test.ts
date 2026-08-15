@@ -6,6 +6,7 @@ import {
   createGeminiClient,
   createSafeClaudeCodeClient,
   createSafeCodexClient,
+  createSafeGeminiClient,
   jsonSchemaFromZod,
 } from "./client.js";
 
@@ -116,6 +117,21 @@ describe("safe execution profiles", () => {
   it("marks the Codex profile as read-only and ephemeral", () => {
     const client = createSafeCodexClient({ cwd: "/tmp/envelope" });
     expect(client.profileId).toBe("codex-read-only-ephemeral-v1");
+  });
+
+  it("marks the Gemini profile as read-only and ephemeral", () => {
+    const client = createSafeGeminiClient({ cwd: "/tmp/envelope" });
+    expect(client.profileId).toBe("gemini-read-only-ephemeral-v1");
+  });
+
+  it("gives every safe profile a declared identity, so a receipt can name it", () => {
+    for (const client of [
+      createSafeClaudeCodeClient({ cwd: "/tmp/envelope" }),
+      createSafeCodexClient({ cwd: "/tmp/envelope" }),
+      createSafeGeminiClient({ cwd: "/tmp/envelope" }),
+    ]) {
+      expect(client.profileId, client.tool).toBeTruthy();
+    }
   });
 });
 

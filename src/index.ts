@@ -25,6 +25,7 @@ export {
   createGeminiClient,
   createSafeClaudeCodeClient,
   createSafeCodexClient,
+  createSafeGeminiClient,
   type GenerateStructuredArgs,
   type GenerateTextArgs,
   jsonSchemaFromZod,
