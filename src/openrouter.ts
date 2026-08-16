@@ -35,6 +35,19 @@ export interface OpenRouterOptions {
 
 const DEFAULT_BASE_URL = "https://openrouter.ai/api/v1";
 
+/** Models behind OpenRouter sometimes wrap otherwise-valid JSON in a single
+ *  markdown fence even under strict response_format - measured live with
+ *  glm-4.7. Tolerating one fence is defence, not laxity: the JSON inside is
+ *  still schema-validated by the caller. Mirrors the Gemini client. */
+const FENCED_JSON_PATTERN = /^```(?:json)?\s*([\s\S]*?)\s*```$/i;
+
+export function stripMarkdownFence(value: string): string {
+  const trimmed = value.trim();
+  const match = FENCED_JSON_PATTERN.exec(trimmed);
+  const inner = match?.[1];
+  return inner ? inner.trim() : trimmed;
+}
+
 interface ChatCompletionResponse {
   choices?: Array<{
     finish_reason?: string | null;
@@ -188,7 +201,7 @@ export function createOpenRouterClient(args: {
 
       let parsed: unknown;
       try {
-        parsed = JSON.parse(content);
+        parsed = JSON.parse(stripMarkdownFence(content));
       } catch (error) {
         throw new Error(
           "openrouter returned a structured response that is not JSON",

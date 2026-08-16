@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   createOpenRouterClient,
   createSafeOpenRouterClient,
+  stripMarkdownFence,
 } from "./openrouter.js";
 
 describe("createOpenRouterClient", () => {
@@ -27,6 +28,22 @@ describe("createOpenRouterClient", () => {
       model: "z-ai/glm-4.7",
     });
     expect(client.profileId).toBeUndefined();
+  });
+});
+
+describe("stripMarkdownFence", () => {
+  it("unwraps a json fence, measured live from glm-4.7", () => {
+    expect(stripMarkdownFence('```json\n[{"id":1}]\n```')).toBe('[{"id":1}]');
+  });
+  it("unwraps a bare fence", () => {
+    expect(stripMarkdownFence('```\n{"a":1}\n```')).toBe('{"a":1}');
+  });
+  it("leaves bare JSON alone", () => {
+    expect(stripMarkdownFence('{"a":1}')).toBe('{"a":1}');
+  });
+  it("does not unwrap prose that merely starts with a fence", () => {
+    const partial = "```json\n{broken";
+    expect(stripMarkdownFence(partial)).toBe(partial);
   });
 });
 
