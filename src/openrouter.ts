@@ -31,6 +31,20 @@ export interface OpenRouterOptions {
   baseUrl?: string;
   /** Caps sampling randomness. Left unset, the provider default applies. */
   temperature?: number;
+  /**
+   * Upstream provider preference, sent as OpenRouter's `provider` field.
+   *
+   * OpenRouter discounts sit on a specific upstream and the default route does
+   * not necessarily pick it: measured 2026-08-16, deepseek-v4-flash defaulted
+   * to CoreWeave while `{ sort: "price" }` selected StreamLake, which was
+   * carrying a 56% discount. Sorting is preferred to naming a provider, so the
+   * choice keeps working when a promotion ends.
+   *
+   * Note that any manual provider preference disables OpenRouter's sticky
+   * routing, so callers relying on a cached prompt prefix should leave this
+   * unset - the forfeited cache usually costs more than the discount saves.
+   */
+  provider?: Record<string, unknown>;
 }
 
 const DEFAULT_BASE_URL = "https://openrouter.ai/api/v1";
@@ -188,6 +202,9 @@ export function createOpenRouterClient(args: {
           ...(args.options?.temperature !== undefined
             ? { temperature: args.options.temperature }
             : {}),
+          ...(args.options?.provider
+            ? { provider: args.options.provider }
+            : {}),
         },
         input.signal,
       );
@@ -239,11 +256,16 @@ export function createSafeOpenRouterClient(args: {
   apiKey: string;
   model: string;
   timeoutMs?: number;
+  /** Upstream provider preference; see OpenRouterOptions.provider. */
+  provider?: Record<string, unknown>;
 }): CliClient {
   return createOpenRouterClient({
     apiKey: args.apiKey,
     model: args.model,
-    options: { temperature: 0 },
+    options: {
+      temperature: 0,
+      ...(args.provider ? { provider: args.provider } : {}),
+    },
     profileId: "openrouter-stateless-v1",
     timeoutMs: args.timeoutMs,
   });
