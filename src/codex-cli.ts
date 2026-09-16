@@ -93,7 +93,7 @@ function spawnAsync(
     signal?: AbortSignal;
     stdin?: string;
     timeoutMs?: number;
-  },
+  }
 ) {
   return new Promise<{ stdout: string; stderr: string }>((resolve, reject) => {
     const child = spawn(file, args, {
@@ -195,7 +195,7 @@ function spawnAsync(
       cleanup();
       if (aborted) {
         const error = new Error(
-          "codex CLI invocation aborted",
+          "codex CLI invocation aborted"
         ) as CodexCliError;
         error.aborted = true;
         error.signal = signal;
@@ -204,7 +204,7 @@ function spawnAsync(
       }
       if (code !== 0) {
         const e = new Error(
-          `codex CLI failed (code=${code ?? "?"}, signal=${signal ?? "?"}, timedOut=${timedOut}): ${stderr || stdout}`,
+          `codex CLI failed (code=${code ?? "?"}, signal=${signal ?? "?"}, timedOut=${timedOut}): ${stderr || stdout}`
         );
         const error = e as CodexCliError;
         error.code = code;
@@ -253,7 +253,7 @@ export function baseArgs(options: Required<CodexOptions>) {
   }
   args.push(
     "--config",
-    `model_reasoning_effort=${JSON.stringify(options.effort)}`,
+    `model_reasoning_effort=${JSON.stringify(options.effort)}`
   );
   if (options.jsonlEvents) {
     args.push("--json");
@@ -299,9 +299,9 @@ async function execInTempDir(
   options: Required<CodexOptions>,
   setup: (
     td: string,
-    outPath: string,
+    outPath: string
   ) => Promise<{ args: string[]; stdin?: string }>,
-  signal?: AbortSignal,
+  signal?: AbortSignal
 ): Promise<string> {
   const td = await mkdtemp(join(tmpdir(), "envelope-codex-"));
   try {
@@ -352,7 +352,7 @@ export async function codexText(args: {
       args: ["-"],
       stdin: args.prompt,
     }),
-    args.signal,
+    args.signal
   );
   return { text };
 }
@@ -390,7 +390,7 @@ export async function codexStructured<TStructured>(args: {
         stdin: args.prompt,
       };
     },
-    args.signal,
+    args.signal
   );
 
   let parsed: unknown;
@@ -398,7 +398,7 @@ export async function codexStructured<TStructured>(args: {
     parsed = JSON.parse(raw);
   } catch {
     throw new Error(
-      `codex output was not JSON. First 200 chars:\n${raw.slice(0, 200)}`,
+      `codex output was not JSON. First 200 chars:\n${raw.slice(0, 200)}`
     );
   }
 

@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { z } from "zod";
+
 import type { CliClient } from "./client.js";
 import {
   createEnvelope,
@@ -35,7 +36,7 @@ describe("createEnvelope", () => {
 
     // Verify prompt function received parsed data
     expect(client.structured).toHaveBeenCalledWith(
-      expect.objectContaining({ prompt: "Summarize: Hello world" }),
+      expect.objectContaining({ prompt: "Summarize: Hello world" })
     );
   });
 
@@ -75,7 +76,7 @@ describe("createEnvelope", () => {
     });
 
     await expect(envelope({ text: "valid input" })).rejects.toThrow(
-      "Model returned invalid structured output",
+      "Model returned invalid structured output"
     );
   });
 
@@ -89,7 +90,7 @@ describe("createEnvelope", () => {
     });
 
     await expect(envelope({ text: "valid input" })).rejects.toThrow(
-      EnvelopeError,
+      EnvelopeError
     );
   });
 
@@ -165,7 +166,7 @@ describe("createReceiptedEnvelope", () => {
     await expect(promise).rejects.toBeInstanceOf(EnvelopeInvocationError);
     await promise.catch((error: unknown) => {
       expect((error as EnvelopeInvocationError).receipt.error?.kind).toBe(
-        "input_validation",
+        "input_validation"
       );
     });
     expect(client.structured).not.toHaveBeenCalled();
@@ -176,7 +177,7 @@ describe("createReceiptedEnvelope", () => {
     client.structured = vi
       .fn()
       .mockRejectedValue(
-        new Error("claude CLI failed: secret evidence from subprocess stderr"),
+        new Error("claude CLI failed: secret evidence from subprocess stderr")
       );
     const envelope = createReceiptedEnvelope({
       input,
@@ -188,7 +189,7 @@ describe("createReceiptedEnvelope", () => {
     await envelope({ text: "confidential prompt body" }).catch(
       (error: unknown) => {
         const serialized = JSON.stringify(
-          (error as EnvelopeInvocationError).receipt,
+          (error as EnvelopeInvocationError).receipt
         );
         expect(serialized).not.toContain("secret evidence");
         expect(serialized).not.toContain("confidential prompt body");
@@ -196,7 +197,7 @@ describe("createReceiptedEnvelope", () => {
           kind: "provider",
           message: "Provider invocation failed",
         });
-      },
+      }
     );
   });
 });

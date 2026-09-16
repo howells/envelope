@@ -1,7 +1,9 @@
 import { execFile } from "node:child_process";
+
 import type { JSONSchema7 } from "@ai-sdk/provider";
 import type { z } from "zod";
 import { toJSONSchema } from "zod/v4";
+
 import {
   type ClaudeCodeOptions,
   claudeCodeStructured,
@@ -59,7 +61,7 @@ function createVersionReader(args: {
           }
           const version = `${stdout}${stderr}`.trim().split(/\r?\n/, 1)[0];
           resolve(version || undefined);
-        },
+        }
       );
     });
     return cached;
@@ -140,7 +142,7 @@ export interface CliClient {
    * @typeParam T - Expected structured response shape.
    */
   structured<T>(
-    args: GenerateStructuredArgs,
+    args: GenerateStructuredArgs
   ): Promise<{ structured: T; meta?: CliResultMeta }>;
   /**
    * Executes a plain-text completion request.

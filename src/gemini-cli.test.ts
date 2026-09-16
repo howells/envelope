@@ -1,5 +1,7 @@
 import EventEmitter from "node:events";
+
 import { describe, expect, it, vi } from "vitest";
+
 import {
   buildGeminiArgs,
   defaultGeminiOptions,
@@ -111,7 +113,7 @@ describe("buildGeminiArgs", () => {
         adminPolicy: ["./admin.md"],
         extensions: ["ext-a"],
         includeDirectories: ["../shared"],
-      }),
+      })
     );
 
     expect(args).toContain("--debug");
@@ -126,7 +128,7 @@ describe("buildGeminiArgs", () => {
 describe("geminiText", () => {
   it("extracts the response field from the Gemini JSON envelope", async () => {
     setNextChild(
-      createMockChild(JSON.stringify({ response: "hello world" }), 0),
+      createMockChild(JSON.stringify({ response: "hello world" }), 0)
     );
 
     const result = await geminiText({ prompt: "test" });
@@ -154,32 +156,32 @@ describe("geminiText", () => {
           },
           session_id: "abc",
         }),
-        0,
-      ),
+        0
+      )
     );
 
     await expect(geminiText({ prompt: "test" })).rejects.toThrow(
-      "Please set an Auth method (code 41)",
+      "Please set an Auth method (code 41)"
     );
   });
 
   it("throws rather than returning the envelope JSON when `response` is missing", async () => {
     setNextChild(
-      createMockChild(JSON.stringify({ session_id: "abc", stats: {} }), 0),
+      createMockChild(JSON.stringify({ session_id: "abc", stats: {} }), 0)
     );
 
     await expect(geminiText({ prompt: "test" })).rejects.toThrow(
-      "no `response` string",
+      "no `response` string"
     );
   });
 
   it("names the envelope's keys when `response` is missing", async () => {
     setNextChild(
-      createMockChild(JSON.stringify({ session_id: "abc", stats: {} }), 0),
+      createMockChild(JSON.stringify({ session_id: "abc", stats: {} }), 0)
     );
 
     await expect(geminiText({ prompt: "test" })).rejects.toThrow(
-      /keys: session_id, stats/,
+      /keys: session_id, stats/
     );
   });
 
@@ -187,7 +189,7 @@ describe("geminiText", () => {
     setNextChild(createMockChild(JSON.stringify({ response: { text: 1 } }), 0));
 
     await expect(geminiText({ prompt: "test" })).rejects.toThrow(
-      "no `response` string",
+      "no `response` string"
     );
   });
 
@@ -208,12 +210,12 @@ describe("geminiText", () => {
           { type: "system" },
           { type: "result", response: "hi" },
         ]),
-        0,
-      ),
+        0
+      )
     );
 
     await expect(geminiText({ prompt: "test" })).rejects.toThrow(
-      "returned a JSON array of 2 element(s)",
+      "returned a JSON array of 2 element(s)"
     );
   });
 
@@ -258,7 +260,7 @@ describe("geminiText", () => {
 describe("geminiStructured", () => {
   it("parses bare JSON returned by Gemini", async () => {
     setNextChild(
-      createMockChild(JSON.stringify({ response: '{"answer":42}' }), 0),
+      createMockChild(JSON.stringify({ response: '{"answer":42}' }), 0)
     );
 
     const result = await geminiStructured<{ answer: number }>({
@@ -274,8 +276,8 @@ describe("geminiStructured", () => {
     setNextChild(
       createMockChild(
         JSON.stringify({ response: '```json\n{"answer":42}\n```' }),
-        0,
-      ),
+        0
+      )
     );
 
     const result = await geminiStructured<{ answer: number }>({
@@ -293,7 +295,7 @@ describe("geminiStructured", () => {
       geminiStructured({
         prompt: "answer the question",
         jsonSchema: '{"type":"object"}',
-      }),
+      })
     ).rejects.toThrow("gemini output was not JSON");
   });
 
@@ -307,7 +309,7 @@ describe("geminiStructured", () => {
       geminiStructured({
         prompt: "answer the question",
         jsonSchema: '{"type":"object"}',
-      }),
+      })
     ).rejects.toThrow("returned JSON `null`");
   });
 

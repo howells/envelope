@@ -1,5 +1,7 @@
 import EventEmitter from "node:events";
+
 import { describe, expect, it, vi } from "vitest";
+
 import {
   buildBaseArgs,
   claudeCodeStructured,
@@ -74,7 +76,7 @@ describe("buildBaseArgs", () => {
     const args = buildBaseArgs(opts);
     expect(args).toContain("--append-system-prompt");
     expect(args[args.indexOf("--append-system-prompt") + 1]).toBe(
-      "Extra context.",
+      "Extra context."
     );
   });
 
@@ -248,7 +250,7 @@ function setNextChild(child: EventEmitter) {
  */
 function createStreamEvents(
   terminal: Record<string, unknown>,
-  assistantText = "PONG",
+  assistantText = "PONG"
 ) {
   return [
     {
@@ -303,7 +305,7 @@ describe("claudeCodeStructured", () => {
     setNextChild(createMockChild(JSON.stringify(envelope), 0));
 
     await expect(
-      claudeCodeStructured({ prompt: "test", jsonSchema: '{"type":"object"}' }),
+      claudeCodeStructured({ prompt: "test", jsonSchema: '{"type":"object"}' })
     ).rejects.toThrow("rate_limit");
   });
 
@@ -311,7 +313,7 @@ describe("claudeCodeStructured", () => {
     setNextChild(createMockChild("not json at all", 0));
 
     await expect(
-      claudeCodeStructured({ prompt: "test", jsonSchema: '{"type":"object"}' }),
+      claudeCodeStructured({ prompt: "test", jsonSchema: '{"type":"object"}' })
     ).rejects.toThrow("non-JSON output");
   });
 
@@ -346,7 +348,7 @@ describe("claudeCodeStructured", () => {
     setNextChild(createMockChild(JSON.stringify(events), 0));
 
     await expect(
-      claudeCodeStructured({ prompt: "test", jsonSchema: '{"type":"object"}' }),
+      claudeCodeStructured({ prompt: "test", jsonSchema: '{"type":"object"}' })
     ).rejects.toThrow("rate_limit");
   });
 
@@ -387,7 +389,7 @@ describe("claudeCodeStructured", () => {
   it("writes the prompt through stdin instead of argv", async () => {
     const child = createMockChild(
       JSON.stringify({ result: "ok", structured_output: {} }),
-      0,
+      0
     );
     setNextChild(child);
 
@@ -430,12 +432,12 @@ describe("claudeCodeText", () => {
     setNextChild(
       createMockChild(
         JSON.stringify({ is_error: true, subtype: "rate_limit" }),
-        0,
-      ),
+        0
+      )
     );
 
     await expect(claudeCodeText({ prompt: "test" })).rejects.toThrow(
-      "rate_limit",
+      "rate_limit"
     );
   });
 
@@ -491,7 +493,7 @@ describe("claudeCodeText", () => {
     setNextChild(createMockChild(JSON.stringify(events), 0));
 
     await expect(claudeCodeText({ prompt: "ping" })).rejects.toThrow(
-      /no `result` field/,
+      /no `result` field/
     );
   });
 
@@ -499,8 +501,8 @@ describe("claudeCodeText", () => {
     setNextChild(
       createMockChild(
         JSON.stringify({ type: "result", subtype: "success", result: "" }),
-        0,
-      ),
+        0
+      )
     );
 
     const res = await claudeCodeText({ prompt: "test" });

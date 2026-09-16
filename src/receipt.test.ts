@@ -10,8 +10,8 @@ describe("isUsageLimit", () => {
   it("recognises the real Codex exhaustion message", () => {
     expect(
       isUsageLimit(
-        "ERROR: You've hit your usage limit. Visit https://chatgpt.com/codex/settings/usage to purchase more credits or try again at Aug 20th, 2026 6:33 PM.",
-      ),
+        "ERROR: You've hit your usage limit. Visit https://chatgpt.com/codex/settings/usage to purchase more credits or try again at Aug 20th, 2026 6:33 PM."
+      )
     ).toBe(true);
   });
 
@@ -42,8 +42,8 @@ describe("classifyInvocationFailure", () => {
   it("classifies a usage limit as its own kind, not a generic provider fault", () => {
     const classified = classifyInvocationFailure(
       new Error(
-        "codex CLI failed (code=1, signal=?, timedOut=false): ERROR: You've hit your usage limit.",
-      ),
+        "codex CLI failed (code=1, signal=?, timedOut=false): ERROR: You've hit your usage limit."
+      )
     );
     expect(classified.kind).toBe("usage_limit");
   });
@@ -51,8 +51,8 @@ describe("classifyInvocationFailure", () => {
   it("redacts the usage-limit message so no subprocess content escapes", () => {
     const classified = classifyInvocationFailure(
       new Error(
-        "You've hit your usage limit. Visit https://example.com/billing",
-      ),
+        "You've hit your usage limit. Visit https://example.com/billing"
+      )
     );
     expect(classified.message).toBe("Provider usage limit reached");
     expect(classified.message).not.toContain("example.com");
@@ -60,20 +60,20 @@ describe("classifyInvocationFailure", () => {
 
   it("still classifies cancellation ahead of a usage limit", () => {
     const classified = classifyInvocationFailure(
-      new Error("aborted before the rate limit could apply"),
+      new Error("aborted before the rate limit could apply")
     );
     expect(classified.kind).toBe("cancelled");
   });
 
   it("leaves the other kinds alone", () => {
     expect(classifyInvocationFailure(new Error("spawn ENOENT")).kind).toBe(
-      "spawn",
+      "spawn"
     );
     expect(classifyInvocationFailure(new Error("timedOut=true")).kind).toBe(
-      "timeout",
+      "timeout"
     );
     expect(
-      classifyInvocationFailure(new Error("something odd happened")).kind,
+      classifyInvocationFailure(new Error("something odd happened")).kind
     ).toBe("unknown");
   });
 

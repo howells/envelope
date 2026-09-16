@@ -1,4 +1,5 @@
 import type { z } from "zod";
+
 import type { CliClient } from "./client.js";
 import { createClaudeCodeClient, jsonSchemaFromZod } from "./client.js";
 import {
@@ -30,7 +31,7 @@ export class EnvelopeInvocationError extends EnvelopeError {
   constructor(
     message: string,
     readonly receipt: InvocationReceipt,
-    options?: ErrorOptions,
+    options?: ErrorOptions
   ) {
     super(message, options);
   }
@@ -120,7 +121,7 @@ export function createReceiptedEnvelope<
 
   return async (
     inputRaw: unknown,
-    options?: EnvelopeInvocationOptions,
+    options?: EnvelopeInvocationOptions
   ): Promise<ReceiptedEnvelopeResult<z.infer<TOut>>> => {
     const startedAt = new Date();
     const seed: ReceiptSeed = {
@@ -170,7 +171,7 @@ export function createReceiptedEnvelope<
         throw new EnvelopeInvocationError(
           `Model returned invalid structured output:\n${output.error.message}`,
           receipt,
-          { cause: output.error },
+          { cause: output.error }
         );
       }
 
@@ -189,7 +190,7 @@ export function createReceiptedEnvelope<
       throw new EnvelopeInvocationError(
         error instanceof Error ? error.message : String(error),
         receipt,
-        { cause: error },
+        { cause: error }
       );
     }
   };
@@ -250,7 +251,7 @@ export function createEnvelope<
     const output = args.output.safeParse(res.structured);
     if (!output.success) {
       throw new EnvelopeError(
-        `Model returned invalid structured output:\n${output.error.message}`,
+        `Model returned invalid structured output:\n${output.error.message}`
       );
     }
     return output.data;

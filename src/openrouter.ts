@@ -130,13 +130,13 @@ export function createOpenRouterClient(args: {
 
   if (!apiKey) {
     throw new Error(
-      "openrouter client requires an apiKey; pass it explicitly from the caller's env boundary",
+      "openrouter client requires an apiKey; pass it explicitly from the caller's env boundary"
     );
   }
 
   async function call(
     body: Record<string, unknown>,
-    signal?: AbortSignal,
+    signal?: AbortSignal
   ): Promise<ChatCompletionResponse> {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
@@ -168,7 +168,7 @@ export function createOpenRouterClient(args: {
         throw new Error(
           `openrouter request failed (status=${response.status}): ${
             payload.error?.message ?? response.statusText
-          }`,
+          }`
         );
       }
       return payload;
@@ -206,13 +206,13 @@ export function createOpenRouterClient(args: {
             ? { provider: args.options.provider }
             : {}),
         },
-        input.signal,
+        input.signal
       );
 
       const content = payload.choices?.[0]?.message?.content;
       if (!content) {
         throw new Error(
-          "openrouter returned no content for a structured request",
+          "openrouter returned no content for a structured request"
         );
       }
 
@@ -224,7 +224,7 @@ export function createOpenRouterClient(args: {
           "openrouter returned a structured response that is not JSON",
           {
             cause: error,
-          },
+          }
         );
       }
       return { meta: extractMeta(payload), structured: parsed as T };
@@ -232,7 +232,7 @@ export function createOpenRouterClient(args: {
     async text(input: GenerateTextArgs) {
       const payload = await call(
         { messages: [{ content: input.prompt, role: "user" }] },
-        input.signal,
+        input.signal
       );
       const content = payload.choices?.[0]?.message?.content;
       if (content == null) {

@@ -95,7 +95,7 @@ export function buildInvocationReceipt(args: {
     ...(meta?.costUsd !== undefined ? { costUsd: meta.costUsd } : {}),
     durationMs: Math.max(
       0,
-      args.finishedAt.getTime() - seed.startedAt.getTime(),
+      args.finishedAt.getTime() - seed.startedAt.getTime()
     ),
     ...(args.error ? { error: args.error } : {}),
     finishedAt: args.finishedAt.toISOString(),
@@ -140,7 +140,7 @@ export function isUsageLimit(message: string): boolean {
 
 /** Classify transport failures without exposing subprocess stderr or prompt content. */
 export function classifyInvocationFailure(
-  error: unknown,
+  error: unknown
 ): NonNullable<InvocationReceipt["error"]> {
   const message = error instanceof Error ? error.message : String(error);
   const normalized = message.toLowerCase();

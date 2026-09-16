@@ -8,6 +8,7 @@ import {
   ReadableStream,
   type ReadableStreamDefaultController,
 } from "node:stream/web";
+
 import type {
   JSONObject,
   JSONSchema7,
@@ -20,6 +21,7 @@ import type {
   SharedV3ProviderMetadata,
   SharedV3Warning,
 } from "@ai-sdk/provider";
+
 import {
   type CliClient,
   type CliResultMeta,
@@ -51,7 +53,7 @@ const UNSUPPORTED_PARAMS = [
  * Collects warnings for AI SDK parameters that CLI tools silently ignore.
  */
 function collectWarnings(
-  options: LanguageModelV3CallOptions,
+  options: LanguageModelV3CallOptions
 ): SharedV3Warning[] {
   const warnings: SharedV3Warning[] = [];
   for (const param of UNSUPPORTED_PARAMS) {
@@ -101,7 +103,7 @@ function emptyUsage(): LanguageModelV3Usage {
 }
 
 function metaToProviderMetadata(
-  meta: CliResultMeta | undefined,
+  meta: CliResultMeta | undefined
 ): SharedV3ProviderMetadata | undefined {
   if (!meta) {
     return undefined;
@@ -139,7 +141,7 @@ function extractText(content: ReadonlyArray<{ type: string }>): string {
   for (const part of content) {
     if (part.type !== "text" || !("text" in part)) {
       throw new Error(
-        `Envelope CLI adapter only supports text prompt parts, received: ${part.type}`,
+        `Envelope CLI adapter only supports text prompt parts, received: ${part.type}`
       );
     }
     parts.push((part as { type: "text"; text: string }).text);
@@ -178,7 +180,7 @@ function promptToText(prompt: LanguageModelV3CallOptions["prompt"]): string {
 function makeClient(
   tool: CliTool,
   model: string,
-  opts?: CliModelOptions,
+  opts?: CliModelOptions
 ): CliClient {
   if (tool === "codex") {
     return createCodexClient({
@@ -229,7 +231,7 @@ export function cliModel(args: {
     supportedUrls: {},
 
     async doGenerate(
-      callOptions: LanguageModelV3CallOptions,
+      callOptions: LanguageModelV3CallOptions
     ): Promise<LanguageModelV3GenerateResult> {
       const promptText = promptToText(callOptions.prompt);
       const warnings = collectWarnings(callOptions);
@@ -273,13 +275,13 @@ export function cliModel(args: {
       // CLI tools don't truly stream, so we simulate with a single chunk.
       const result = await this.doGenerate(callOptions);
       const textContent = result.content.find(
-        (c): c is { type: "text"; text: string } => c.type === "text",
+        (c): c is { type: "text"; text: string } => c.type === "text"
       );
       const textId = "t0";
 
       const stream = new ReadableStream<LanguageModelV3StreamPart>({
         start(
-          controller: ReadableStreamDefaultController<LanguageModelV3StreamPart>,
+          controller: ReadableStreamDefaultController<LanguageModelV3StreamPart>
         ) {
           controller.enqueue({
             type: "stream-start",

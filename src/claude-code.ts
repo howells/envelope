@@ -162,7 +162,7 @@ function isRecord(v: unknown): v is Record<string, unknown> {
  * @returns The envelope carrying the reply, or `undefined` when the payload holds none.
  */
 export function selectResultEnvelope(
-  payload: unknown,
+  payload: unknown
 ): Record<string, unknown> | undefined {
   if (isRecord(payload)) {
     return payload;
@@ -199,7 +199,7 @@ function assertClaudeArgSize(jsonSchema?: string) {
   const schemaBytes = Buffer.byteLength(jsonSchema ?? "", "utf8");
   if (schemaBytes > MAX_CLAUDE_ARG_BYTES) {
     throw new Error(
-      "claude CLI schema exceeds the safe argv transport limit; reduce the schema before calling this wrapper",
+      "claude CLI schema exceeds the safe argv transport limit; reduce the schema before calling this wrapper"
     );
   }
 }
@@ -221,7 +221,7 @@ function spawnAsync(
     signal?: AbortSignal;
     stdin?: string;
     timeoutMs?: number;
-  },
+  }
 ) {
   return new Promise<{ stdout: string; stderr: string }>((resolve, reject) => {
     const child = spawn(file, args, {
@@ -322,7 +322,7 @@ function spawnAsync(
       cleanup();
       if (killedByAbort) {
         const error = new Error(
-          "claude CLI invocation aborted",
+          "claude CLI invocation aborted"
         ) as ClaudeCliError;
         error.aborted = true;
         error.signal = signal;
@@ -333,7 +333,7 @@ function spawnAsync(
         const e = new Error(
           `claude CLI failed (code=${code ?? "?"}, signal=${
             signal ?? "?"
-          }, killed=${killedByTimeout}): ${stderr || stdout}`,
+          }, killed=${killedByTimeout}): ${stderr || stdout}`
         );
         const error = e as ClaudeCliError;
         error.code = code;
@@ -356,7 +356,7 @@ function spawnAsync(
  * @returns A normalized options object where every field is defined.
  */
 export function defaultClaudeOptions(
-  opts?: ClaudeCodeOptions,
+  opts?: ClaudeCodeOptions
 ): Required<ClaudeCodeOptions> {
   return {
     claudePath: opts?.claudePath ?? "claude",
@@ -442,7 +442,7 @@ function sleep(ms: number, signal?: AbortSignal) {
     const abort = () => {
       clearTimeout(timeout);
       const error = new Error(
-        "claude CLI invocation aborted",
+        "claude CLI invocation aborted"
       ) as ClaudeCliError;
       error.aborted = true;
       reject(error);
@@ -477,7 +477,7 @@ async function spawnWithRetry(
   options: Required<ClaudeCodeOptions>,
   cliArgs: string[],
   prompt: string,
-  signal?: AbortSignal,
+  signal?: AbortSignal
 ): Promise<{ attemptCount: number; stdout: string }> {
   let stdout: string | null = null;
   let lastErr: unknown = null;
@@ -559,7 +559,7 @@ export async function claudeCodeStructured<TStructured>(args: {
     options,
     cliArgs,
     args.prompt,
-    args.signal,
+    args.signal
   );
 
   let envelopeUnknown: unknown;
@@ -567,21 +567,21 @@ export async function claudeCodeStructured<TStructured>(args: {
     envelopeUnknown = JSON.parse(stdout) as unknown;
   } catch {
     throw new Error(
-      `claude CLI returned non-JSON output. First 200 chars:\n${stdout.slice(0, 200)}`,
+      `claude CLI returned non-JSON output. First 200 chars:\n${stdout.slice(0, 200)}`
     );
   }
 
   const selected = selectResultEnvelope(envelopeUnknown);
   if (!selected) {
     throw new Error(
-      "claude CLI returned non-object JSON envelope: found neither an envelope object nor a terminal `result` event",
+      "claude CLI returned non-object JSON envelope: found neither an envelope object nor a terminal `result` event"
     );
   }
 
   const envelope = selected as ClaudeCodeEnvelope<TStructured>;
   if (envelope.is_error) {
     throw new Error(
-      `claude CLI error envelope: ${envelope.subtype ?? "unknown"}`,
+      `claude CLI error envelope: ${envelope.subtype ?? "unknown"}`
     );
   }
 
@@ -628,7 +628,7 @@ export async function claudeCodeText(args: {
     options,
     cliArgs,
     args.prompt,
-    args.signal,
+    args.signal
   );
 
   let envelopeUnknown: unknown;
@@ -647,14 +647,14 @@ export async function claudeCodeText(args: {
   const envelope = selected as ClaudeCodeEnvelope<unknown>;
   if (envelope.is_error) {
     throw new Error(
-      `claude CLI error envelope: ${envelope.subtype ?? "unknown"}`,
+      `claude CLI error envelope: ${envelope.subtype ?? "unknown"}`
     );
   }
   if (envelope.result === undefined) {
     throw new Error(
       `claude CLI returned an envelope with no \`result\` field (type=${
         envelope.type ?? "?"
-      }, subtype=${envelope.subtype ?? "?"})`,
+      }, subtype=${envelope.subtype ?? "?"})`
     );
   }
   return {

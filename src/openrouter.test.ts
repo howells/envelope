@@ -9,7 +9,7 @@ import {
 describe("createOpenRouterClient", () => {
   it("refuses to construct without a key rather than reading the environment", () => {
     expect(() =>
-      createOpenRouterClient({ apiKey: "", model: "z-ai/glm-4.7" }),
+      createOpenRouterClient({ apiKey: "", model: "z-ai/glm-4.7" })
     ).toThrow(/apiKey/);
   });
 
@@ -59,7 +59,7 @@ describe("createSafeOpenRouterClient", () => {
 
   it("is still refused without a key", () => {
     expect(() =>
-      createSafeOpenRouterClient({ apiKey: "", model: "z-ai/glm-4.7" }),
+      createSafeOpenRouterClient({ apiKey: "", model: "z-ai/glm-4.7" })
     ).toThrow(/apiKey/);
   });
 });
