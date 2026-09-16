@@ -5,12 +5,7 @@
       "entry": ["src/**/*.ts", "index.ts"],
       "project": ["src/**/*.ts"],
       "ignore": ["**/*.test.ts"],
-      "ignoreDependencies": [
-        "husky",
-        "ultracite",
-        "lint-staged",
-        "@biomejs/biome"
-      ]
+      "ignoreDependencies": ["ultracite", "lint-staged", "@howells/husky"]
     },
     "playground": {
       "entry": ["src/**/*.{ts,tsx}"],
