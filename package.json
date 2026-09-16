@@ -3,21 +3,30 @@
   "version": "0.7.0",
   "private": false,
   "description": "Strict Zod IO wrapper around local CLI LLMs (Claude Code, Codex, Gemini), plus an AI SDK adapter.",
-  "type": "module",
-  "sideEffects": false,
+  "keywords": [
+    "ai-sdk",
+    "claude",
+    "cli",
+    "codex",
+    "gemini",
+    "llm",
+    "zod"
+  ],
+  "homepage": "https://github.com/howells/envelope#readme",
+  "bugs": {
+    "url": "https://github.com/howells/envelope/issues"
+  },
   "license": "MIT",
   "author": "Daniel Howells",
   "repository": {
     "type": "git",
     "url": "git+ssh://git@github.com/howells/envelope.git"
   },
-  "bugs": {
-    "url": "https://github.com/howells/envelope/issues"
-  },
-  "homepage": "https://github.com/howells/envelope#readme",
   "files": [
     "dist"
   ],
+  "type": "module",
+  "sideEffects": false,
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -31,9 +40,6 @@
   "publishConfig": {
     "access": "public"
   },
-  "engines": {
-    "node": ">=20"
-  },
   "scripts": {
     "build": "tsc",
     "dev": "turbo run dev --filter=@howells/envelope-playground",
@@ -41,31 +47,19 @@
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "prepare": "husky",
-    "format": "howells-format",
-    "lint": "howells-biome check src",
+    "format": "howells-fix",
+    "lint": "howells-check src",
     "knip": "knip",
     "dev:all": "turbo run dev --parallel",
     "check": "pnpm typecheck && pnpm lint && pnpm test",
     "check:affected": "turbo run build lint typecheck test --affected",
     "clean": "turbo clean"
   },
-  "keywords": [
-    "llm",
-    "cli",
-    "claude",
-    "codex",
-    "gemini",
-    "zod",
-    "ai-sdk"
-  ],
   "dependencies": {
     "@ai-sdk/provider": "^3.0.10"
   },
-  "peerDependencies": {
-    "zod": "^4.0.0"
-  },
   "devDependencies": {
-    "@howells/lint": "^0.1.6",
+    "@howells/lint": "^3.3.2",
     "@howells/typescript-config": "^0.1.2",
     "@types/node": "^25.6.0",
     "husky": "^9.1.7",
@@ -76,8 +70,14 @@
     "vitest": "^4.1.5",
     "zod": "^4.4.2"
   },
-  "packageManager": "pnpm@10.23.0",
+  "peerDependencies": {
+    "zod": "^4.0.0"
+  },
   "lint-staged": {
-    "*.{js,ts,jsx,tsx,json,jsonc,css}": "howells-format"
-  }
+    "*.{js,ts,jsx,tsx,json,jsonc,css}": "howells-fix"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "packageManager": "pnpm@10.23.0"
 }
