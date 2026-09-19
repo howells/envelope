@@ -23,17 +23,10 @@
     "typecheck": {
       "cache": false
     },
-    "clean": {
-      "cache": false
-    },
     "test": {
       "dependsOn": ["^build"],
       "outputs": ["coverage/**", "playwright-report/**", "test-results/**"],
       "cache": false
-    },
-    "test:watch": {
-      "cache": false,
-      "persistent": true
     }
   }
 }

@@ -115,7 +115,7 @@ jobs:
       - name: Verify and pack
         run: |
           set -euo pipefail
-          pnpm check
+          pnpm prepush
           mkdir -p "$GITHUB_WORKSPACE/release-artifacts"
           pnpm pack --pack-destination "$GITHUB_WORKSPACE/release-artifacts"
       # Installing the tarball into a fresh consumer outside the working

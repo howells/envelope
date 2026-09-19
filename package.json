@@ -43,18 +43,14 @@
   "scripts": {
     "build": "tsc",
     "dev": "turbo run dev --filter=@howells/envelope-playground",
+    "lint": "howells-check src",
+    "lint:fix": "howells-fix src",
+    "lint:ratchet": "node scripts/check-lint-baseline.mjs",
     "prepack": "pnpm build",
-    "test": "vitest run",
-    "typecheck": "tsc --noEmit",
     "prepare": "howells-husky",
-    "format": "howells-fix",
-    "lint": "node scripts/check-lint-baseline.mjs",
-    "knip": "knip",
-    "dev:all": "turbo run dev --parallel",
-    "check": "pnpm typecheck && pnpm lint && pnpm test",
-    "check:affected": "turbo run build lint typecheck test --affected",
-    "clean": "turbo clean",
-    "lint:all": "howells-check src"
+    "prepush": "pnpm typecheck && pnpm lint:ratchet && pnpm test",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@ai-sdk/provider": "^3.0.10"
@@ -64,7 +60,6 @@
     "@howells/lint": "^3.3.2",
     "@howells/typescript-config": "^0.1.2",
     "@types/node": "^25.6.0",
-    "knip": "^6.11.0",
     "lint-staged": "^16.4.0",
     "turbo": "2.9.7",
     "typescript": "7.0.2",

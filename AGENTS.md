@@ -8,9 +8,9 @@
 
 ## Commands
 
-- `pnpm check` - typecheck, lint, test.
+- `pnpm prepush` - typecheck, the lint ratchet, test.
+- `pnpm lint` - the full lint; `pnpm lint:ratchet` allows the recorded baseline.
 - `pnpm dev` - the playground.
-- `pnpm knip` - dead exports.
 
 ## Rules
 
