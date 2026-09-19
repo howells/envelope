@@ -45,14 +45,14 @@ function lintBin(dir, name) {
 }
 
 // A unit is a directory whose own lint script runs howells-check. Its targets
-// are that command's arguments; its other `&&` segments are extra checks.
-// At the repo root, `lint` is this gate and `lint:all` holds the full run it
-// replaced, so the root unit is read from `lint:all`.
+// are that command's arguments; its other `&&` segments are extra checks. That
+// holds at the repo root too: `lint` is the full run everywhere and this gate is
+// `lint:ratchet`.
 function unitFrom(dir) {
   const manifestPath = join(dir, "package.json");
   if (!existsSync(manifestPath)) return undefined;
   const scripts = JSON.parse(readFileSync(manifestPath, "utf8")).scripts ?? {};
-  const lint = (dir === root ? scripts["lint:all"] : scripts.lint) ?? "";
+  const lint = scripts.lint ?? "";
   const segments = lint
     .split("&&")
     .map((s) => s.trim())

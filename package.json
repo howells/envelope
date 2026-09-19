@@ -56,7 +56,7 @@
     "@ai-sdk/provider": "^3.0.10"
   },
   "devDependencies": {
-    "@howells/husky": "^0.2.3",
+    "@howells/husky": "^0.2.5",
     "@howells/lint": "^3.3.2",
     "@howells/typescript-config": "^0.1.2",
     "@types/node": "^25.6.0",
