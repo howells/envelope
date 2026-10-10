@@ -1,21 +1,16 @@
-# Envelope
+# envelope
 
-`@howells/envelope`, a published MIT package. A strict Zod IO wrapper around local CLI LLMs - `claude` (Claude Code), `codex`, `gemini` - plus an AI SDK provider adapter. Validate the input with Zod, ask the CLI for structured JSON through `--json-schema` or `--output-schema`, then validate the output with Zod again.
+Documentation, specifications, decisions and outstanding work live in Linear (howells, ENV).
 
-## Layout
+- [envelope — project documentation](https://linear.app/howells/document/envelope-project-documentation-e918fa9caaa7)
 
-`src/` is the package, one file per client (`claude-code.ts`, `codex-cli.ts`, `gemini-cli.ts`, plus `envelope.ts`, `client.ts`, `ai-sdk.ts`), each with a colocated `.test.ts`. `playground/` is a Vite client and an Express server for driving it by hand, and isn't published.
+```sh
+pnpm dev
+pnpm typecheck
+pnpm lint
+pnpm test
+pnpm build
+pnpm prepush
+```
 
-## Commands
-
-- `pnpm prepush` - typecheck, the lint ratchet, test.
-- `pnpm lint` - the full lint; `pnpm lint:ratchet` allows the recorded baseline.
-- `pnpm dev` - the playground.
-
-## Rules
-
-- Only `dist` is published, and `prepack` builds it. The subpath exports are `.` and `./ai-sdk`; a third one has to be added to both `exports` and `files`.
-- `zod` is a peer dependency. Never import it as a runtime dependency of the package.
-- Each client shells out to a CLI the user has to have installed and authenticated. Tests fake the subprocess, and there are no live model calls.
-
-Linear: team ENV (Howells).
+Read the linked operating rules and domain definitions before editing. Keep one writer per checkout; preserve existing work. Put plans, handoffs and evidence on the owning Linear issue. Do not add local documentation or task reports. Instruments and Ground are the documentation exceptions.
