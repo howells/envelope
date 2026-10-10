@@ -40,7 +40,7 @@ export interface OpenRouterOptions {
    * carrying a 56% discount. Sorting is preferred to naming a provider, so the
    * choice keeps working when a promotion ends.
    *
-   * Note that any manual provider preference disables OpenRouter's sticky
+   * Note that manual provider ordering disables OpenRouter's sticky
    * routing, so callers relying on a cached prompt prefix should leave this
    * unset - the forfeited cache usually costs more than the discount saves.
    */
@@ -143,9 +143,19 @@ export function createOpenRouterClient(args: {
     const onAbort = () => controller.abort();
     signal?.addEventListener("abort", onAbort, { once: true });
 
+    let provider = args.options?.provider;
+    const [origin] = model.split("/");
+    if (origin === "openai" || origin === "anthropic") {
+      provider = { ...provider, allow_fallbacks: false, only: [origin] };
+    }
+
     try {
       const response = await fetch(`${baseUrl}/chat/completions`, {
-        body: JSON.stringify({ model, ...body }),
+        body: JSON.stringify({
+          model,
+          ...body,
+          provider,
+        }),
         headers: {
           Authorization: `Bearer ${apiKey}`,
           "Content-Type": "application/json",
@@ -201,9 +211,6 @@ export function createOpenRouterClient(args: {
           },
           ...(args.options?.temperature !== undefined
             ? { temperature: args.options.temperature }
-            : {}),
-          ...(args.options?.provider
-            ? { provider: args.options.provider }
             : {}),
         },
         input.signal
