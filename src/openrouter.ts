@@ -111,6 +111,25 @@ function extractMeta(payload: ChatCompletionResponse): CliResultMeta {
   };
 }
 
+/** Keep origin pins authoritative while preserving caller privacy settings. */
+const providerForModel = (
+  model: string,
+  provider: OpenRouterOptions["provider"]
+): OpenRouterOptions["provider"] => {
+  const [origin] = model.split("/");
+  return origin === "openai" || origin === "anthropic"
+    ? { ...provider, allow_fallbacks: false, only: [origin] }
+    : provider;
+};
+
+/** Attribution follows caller options on each request. */
+const requestHeaders = (apiKey: string, options?: OpenRouterOptions) => ({
+  Authorization: `Bearer ${apiKey}`,
+  "Content-Type": "application/json",
+  ...(options?.appUrl ? { "HTTP-Referer": options.appUrl } : {}),
+  ...(options?.appTitle ? { "X-Title": options.appTitle } : {}),
+});
+
 /**
  * Creates a hosted OpenRouter client.
  *
@@ -143,11 +162,7 @@ export function createOpenRouterClient(args: {
     const onAbort = () => controller.abort();
     signal?.addEventListener("abort", onAbort, { once: true });
 
-    let provider = args.options?.provider;
-    const [origin] = model.split("/");
-    if (origin === "openai" || origin === "anthropic") {
-      provider = { ...provider, allow_fallbacks: false, only: [origin] };
-    }
+    const provider = providerForModel(model, args.options?.provider);
 
     try {
       const response = await fetch(`${baseUrl}/chat/completions`, {
@@ -156,16 +171,7 @@ export function createOpenRouterClient(args: {
           ...body,
           provider,
         }),
-        headers: {
-          Authorization: `Bearer ${apiKey}`,
-          "Content-Type": "application/json",
-          ...(args.options?.appUrl
-            ? { "HTTP-Referer": args.options.appUrl }
-            : {}),
-          ...(args.options?.appTitle
-            ? { "X-Title": args.options.appTitle }
-            : {}),
-        },
+        headers: requestHeaders(apiKey, args.options),
         method: "POST",
         signal: controller.signal,
       });
