@@ -59,7 +59,7 @@
   "devDependencies": {
     "@howells/husky": "^0.2.5",
     "@howells/lint": "^3.5.1",
-    "@howells/typescript-config": "^0.1.6",
+    "@howells/typescript-config": "^0.1.8",
     "@types/node": "^26.6.2",
     "lint-staged": "^17.5.1",
     "turbo": "2.11.3",
