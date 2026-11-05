@@ -1,16 +1,15 @@
 # envelope
 
-Documentation, specifications, decisions and outstanding work live in Linear (howells, ENV).
-
-- [envelope — project documentation](https://linear.app/howells/document/envelope-project-documentation-e918fa9caaa7)
+Strict Zod IO wrapper around local CLI LLMs (Claude Code, Codex, Gemini), plus an AI SDK adapter. Published to npm as `@howells/envelope`. Tracker: Linear (howells, ENV).
 
 ```sh
-pnpm dev
+pnpm dev        # playground
 pnpm typecheck
 pnpm lint
 pnpm test
 pnpm build
-pnpm prepush
 ```
 
-Read the linked operating rules and domain definitions before editing. Keep one writer per checkout; preserve existing work. Put plans, handoffs and evidence on the owning Linear issue. Do not add local documentation or task reports. Instruments and Ground are the documentation exceptions.
+Release: push a `vX.Y.Z` tag matching package.json; `.github/workflows/release.yml` publishes via npm trusted publishing (don't rename that file).
+
+Don't overwrite others' uncommitted work. Run the tests that cover what you changed.

@@ -45,11 +45,8 @@
     "dev": "turbo run dev --filter=@howells/envelope-playground",
     "lint": "howells-check src",
     "lint:fix": "howells-fix src",
-    "lint:ratchet": "howells-ratchet",
-    "lint:rebaseline": "howells-ratchet --write",
     "prepack": "pnpm build",
     "prepare": "howells-husky",
-    "prepush": "pnpm typecheck && pnpm lint:ratchet && pnpm test",
     "test": "vitest run",
     "typecheck": "tsc --noEmit"
   },
