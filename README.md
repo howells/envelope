@@ -1,8 +1,6 @@
 # envelope
 
-Documentation, specifications, decisions and outstanding work live in Linear (howells, ENV).
-
-- [envelope — project documentation](https://linear.app/howells/document/envelope-project-documentation-e918fa9caaa7)
+Issues live in Linear (howells, ENV).
 
 ```sh
 npm install @howells/envelope
