@@ -18,7 +18,7 @@ Don't overwrite others' uncommitted work. Run the tests that cover what you chan
 
 ### Issue tracker
 
-Issues live in Linear (howells, ENV). See `docs/agents/issue-tracker.md`.
+Linear, workspace `howells`, team `ENV`. See `~/Sites/home/docs/agents/issue-tracker.md`.
 
 ### Triage labels
 
